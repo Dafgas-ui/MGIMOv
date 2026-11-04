@@ -147,7 +147,7 @@ class IdentityTests(unittest.TestCase):
             definitions=root/'v2';definitions.mkdir();shutil.copyfile(ROOT/'backend/migrations/0001_initial.sql',definitions/'0001_initial.sql')
             db=root/'upgrade.sqlite3';update(db,create=True,directory=definitions)
             with connection(Settings(db),write=True) as c:c.execute("INSERT INTO app_metadata VALUES ('preserve','yes')")
-            update(db,backup=root/'before.sqlite3');self.assertEqual(status(db)['applied'],['0001_initial','0002_identity'])
+            update(db,backup=root/'before.sqlite3');self.assertEqual(status(db)['applied'],['0001_initial','0002_identity','0003_schedule'])
             self.assertEqual(update(db)['pending'],[])
             with connection(Settings(db)) as c:self.assertEqual(c.execute("SELECT value FROM app_metadata WHERE key='preserve'").fetchone()[0],'yes')
         with self.assertRaises(ValueError):seed_demo(self.config,self.credentials)

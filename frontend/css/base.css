@@ -24,3 +24,19 @@ input:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
 dt { color: var(--muted); margin-top: 12px; }
 dd { margin: 0; overflow-wrap: anywhere; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.schedule-section { margin-top: 24px; }
+.schedule-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.schedule-toolbar button { width: auto; flex: 1 1 120px; }
+.schedule-toolbar button[aria-pressed="false"] { background: var(--card); color: var(--text); }
+.schedule-date-controls { display: flex; gap: 8px; align-items: center; }
+.schedule-date-controls button { width: 44px; flex: 0 0 44px; padding: 8px; }
+.schedule-date-controls input { min-width: 0; width: 100%; flex: 1 1 0; }
+.schedule-day { margin-top: 28px; }
+.lesson-card { margin: 12px 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; overflow-wrap: anywhere; }
+.lesson-card h4 { font-size: 18px; margin: 8px 0; }
+.lesson-card p { margin: 8px 0; }
+.lesson-time { color: var(--mint); }
+.lesson-inactive { border-style: dashed; background: #24212d; }
+.change-badge { color: var(--purple); font-weight: 650; }
+.change-detail { color: var(--muted); font-size: 14px; }

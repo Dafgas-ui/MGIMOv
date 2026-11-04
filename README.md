@@ -1,10 +1,10 @@
-# Цифровой деканат будущего — V3
+# Цифровой деканат будущего — V4
 
 Конкурсный концепт. Неофициальный сервис. Все данные вымышлены.
 
 Самостоятельное приложение: Python 3.13/FastAPI, SQLite, HTML/CSS/JavaScript ES modules.
 Реализованы вход, серверные сессии, роли student/staff и собственные профили.
-Расписание, оценки, заявки и уведомления ещё не реализованы. Конкурсный MVP не готов.
+Реализованы групповое расписание и история изменений. Оценки, заявки и уведомления ещё не реализованы. Конкурсный MVP не готов.
 
 ## Подготовка изолированной демонстрационной среды (PowerShell)
 
@@ -17,10 +17,11 @@
 python -m venv .venv
 python -m pip --python .venv install -r requirements.txt
 
-$env:MGIMOV_DB_PATH = '.tmp/demo-v3.sqlite3'
+$env:MGIMOV_DB_PATH = '.tmp/demo-v4.sqlite3'
 $env:MGIMOV_ORIGIN = 'http://127.0.0.1:8010'
 & .\.venv\Scripts\python.exe -B -m backend.migrations init
-& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-v3.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-v4.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_schedule --db .tmp/demo-v4.sqlite3 --confirm-demo
 & .\.venv\Scripts\python.exe -B -m uvicorn backend.app:app --host 127.0.0.1 --port 8010 --no-proxy-headers
 ```
 
@@ -81,7 +82,7 @@ Startup не создаёт базу/схему; health сообщает гот�
 ```powershell
 python -m pip --python .venv install -r requirements-test.txt
 & .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
-node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js
+node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js
 Get-ChildItem frontend/js -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
 ```
 
@@ -89,8 +90,8 @@ Node.js 24, без npm-зависимостей. Тесты создают то�
 HTTP-тесты запускают собственные loopback-серверы на свободных портах и завершают их.
 В ограниченной песочнице могут потребоваться разрешения локального запуска.
 Hardening изменил health на лёгкую readiness (без integrity_check/проигрывания схемы).
-Полная проверка: `python -B -m backend.commands.diagnose --db .tmp/demo-v3.sqlite3`.
-Ограниченная явная очистка: `python -B -m backend.commands.cleanup_sessions --db .tmp/demo-v3.sqlite3 --limit 100 --confirm-cleanup`.
+Полная проверка: `python -B -m backend.commands.diagnose --db .tmp/demo-v4.sqlite3`.
+Ограниченная явная очистка: `python -B -m backend.commands.cleanup_sessions --db .tmp/demo-v4.sqlite3 --limit 100 --confirm-cleanup`.
 Использовать Python новой .venv; команды не выполняются автоматически.
 Предупреждение Starlette/httpx сохраняется, зависимости не обновлялись.
 Требования к будущему хостингу — [deployment-security.md](docs/deployment-security.md);
@@ -101,3 +102,36 @@ Hardening изменил health на лёгкую readiness (без integrity_ch
 
 Документы: [архитектура](docs/architecture.md), [решения](docs/decisions.md),
 [статус](docs/coordination/project-status.md), [проверки](docs/test-results.md).
+
+## Расписание V4
+
+После отдельного создания демобазы и пользователей выполните seed_schedule (в примере выше).
+По умолчанию создаётся текущая московская неделя; для повторяемой даты можно добавить
+`--week-of 2026-11-04`. Повторный seed не перезаписывает существующее расписание.
+Для перехода с существующей V3-демобазы сначала требуется отдельно разрешённое apply
+с новым backup, затем seed_schedule. Рабочая data/deanery.sqlite3 этим этапом не менялась.
+
+GET `/api/v1/me/schedule?view=today&date=2026-11-04` — выбранный день;
+`view=week` — неделя с понедельника. Без date сервер использует сегодня в Europe/Moscow.
+Разрешённый диапазон выбора дат: 1900–2100; API не принимает group_id/user_id.
+Студент получает только группу своей серверной сессии, staff не получает расписание
+произвольных групп. Нет endpoint публичного редактирования.
+
+Демонстрация: две разные группы/дисциплины/время занятий. Группа А содержит отмену,
+перенос, замену аудитории и преподавателя; изменения видны вместе с «было/стало».
+На прежнем дне переноса остаётся неактивная карточка с новой датой; это не второе
+занятие и не занятость комнаты. Источник реальных интервалов — только lessons
+с status=scheduled, не UI-маркеры из истории.
+
+Изменить отдельное занятие можно доверенной локальной командой с явной базой,
+версией и причиной (примеры относятся только к созданной демобазе):
+
+```powershell
+& .\.venv\Scripts\python.exe -B -m backend.commands.change_lesson --db .tmp/demo-v4.sqlite3 --lesson demo-a-4 --version 1 --reason "Демонстрационная отмена" --status cancelled --confirm-change
+```
+
+Перенос: `--date YYYY-MM-DD --start-minute 660 --end-minute 750`;
+замена: `--room-id demo-r3` или `--teacher-id demo-t2`. При неверной версии/ссылке
+запись отклоняется, занятие и история меняются атомарно. Это не веб-кабинет сотрудника.
+Серии повторений, бронирование и поиск свободных комнат не реализованы.
+Модель корпусов/аудиторий/capacity/equipment/интервалов подготовлена для будущего поиска.

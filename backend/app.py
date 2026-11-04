@@ -6,12 +6,15 @@ from .config import ROOT, Settings
 from .auth.routes import install_identity
 from .migrations.manager import MigrationError
 from .health import Readiness
+from .schedule.routes import install_schedule
 
 ASSETS = {
     "/": ("index.html", "text/html"),
     "/css/tokens.css": ("css/tokens.css", "text/css"),
     "/css/base.css": ("css/base.css", "text/css"),
     "/js/app.js": ("js/app.js", "text/javascript"),
+    "/js/schedule.js": ("js/schedule.js", "text/javascript"),
+    "/js/schedule-state.js": ("js/schedule-state.js", "text/javascript"),
     "/js/account.js": ("js/account.js", "text/javascript"),
     "/js/account-state.js": ("js/account-state.js", "text/javascript"),
     "/js/api.js": ("js/api.js", "text/javascript"),
@@ -25,6 +28,7 @@ def create_app(settings: Settings | None = None):
     application = FastAPI(title="Цифровой деканат — конкурсный концепт", docs_url=None, redoc_url=None, openapi_url=None)
     application.state.settings = settings
     install_identity(application,settings)
+    install_schedule(application,settings)
     readiness = Readiness(settings)
 
     @application.get("/api/health")
