@@ -1,27 +1,28 @@
-# Цифровой деканат будущего — V4
+# Цифровой деканат будущего — V5
 
 Конкурсный концепт. Неофициальный сервис. Все данные вымышлены.
 
 Самостоятельное приложение: Python 3.13/FastAPI, SQLite, HTML/CSS/JavaScript ES modules.
 Реализованы вход, серверные сессии, роли student/staff и собственные профили.
-Реализованы групповое расписание и история изменений. Оценки, заявки и уведомления ещё не реализованы. Конкурсный MVP не готов.
+Реализованы групповое расписание и история изменений. Реализованы личная зачётка, экзамены, задолженности и прогресс. Заявки и уведомления ещё не реализованы. Конкурсный MVP не готов.
 
 ## Подготовка изолированной демонстрационной среды (PowerShell)
 
 Команды выполняются из корня проекта. Новая база должна иметь новый путь;
 существующие файлы не перезаписываются. Рабочую data/deanery.sqlite3 V2 не мигрировать
-без отдельного решения. Для V3 по умолчанию старой базы недостаточно: health=503.
+без отдельного решения. Для V5 по умолчанию старой базы недостаточно: health=503.
 
 ```powershell
 # Только если окружение ещё не подготовлено:
 python -m venv .venv
 python -m pip --python .venv install -r requirements.txt
 
-$env:MGIMOV_DB_PATH = '.tmp/demo-v4.sqlite3'
+$env:MGIMOV_DB_PATH = '.tmp/demo-v5.sqlite3'
 $env:MGIMOV_ORIGIN = 'http://127.0.0.1:8010'
 & .\.venv\Scripts\python.exe -B -m backend.migrations init
-& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-v4.sqlite3 --confirm-demo
-& .\.venv\Scripts\python.exe -B -m backend.commands.seed_schedule --db .tmp/demo-v4.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-v5.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_schedule --db .tmp/demo-v5.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_academics --db .tmp/demo-v5.sqlite3 --confirm-demo
 & .\.venv\Scripts\python.exe -B -m uvicorn backend.app:app --host 127.0.0.1 --port 8010 --no-proxy-headers
 ```
 
@@ -82,7 +83,7 @@ Startup не создаёт базу/схему; health сообщает гот�
 ```powershell
 python -m pip --python .venv install -r requirements-test.txt
 & .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
-node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js
+node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js tests/academics.test.js
 Get-ChildItem frontend/js -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
 ```
 
@@ -90,8 +91,8 @@ Node.js 24, без npm-зависимостей. Тесты создают то�
 HTTP-тесты запускают собственные loopback-серверы на свободных портах и завершают их.
 В ограниченной песочнице могут потребоваться разрешения локального запуска.
 Hardening изменил health на лёгкую readiness (без integrity_check/проигрывания схемы).
-Полная проверка: `python -B -m backend.commands.diagnose --db .tmp/demo-v4.sqlite3`.
-Ограниченная явная очистка: `python -B -m backend.commands.cleanup_sessions --db .tmp/demo-v4.sqlite3 --limit 100 --confirm-cleanup`.
+Полная проверка: `python -B -m backend.commands.diagnose --db .tmp/demo-v5.sqlite3`.
+Ограниченная явная очистка: `python -B -m backend.commands.cleanup_sessions --db .tmp/demo-v5.sqlite3 --limit 100 --confirm-cleanup`.
 Использовать Python новой .venv; команды не выполняются автоматически.
 Предупреждение Starlette/httpx сохраняется, зависимости не обновлялись.
 Требования к будущему хостингу — [deployment-security.md](docs/deployment-security.md);
@@ -127,7 +128,7 @@ GET `/api/v1/me/schedule?view=today&date=2026-11-04` — выбранный де
 версией и причиной (примеры относятся только к созданной демобазе):
 
 ```powershell
-& .\.venv\Scripts\python.exe -B -m backend.commands.change_lesson --db .tmp/demo-v4.sqlite3 --lesson demo-a-4 --version 1 --reason "Демонстрационная отмена" --status cancelled --confirm-change
+& .\.venv\Scripts\python.exe -B -m backend.commands.change_lesson --db .tmp/demo-v5.sqlite3 --lesson demo-a-4 --version 1 --reason "Демонстрационная отмена" --status cancelled --confirm-change
 ```
 
 Перенос: `--date YYYY-MM-DD --start-minute 660 --end-minute 750`;
@@ -135,3 +136,51 @@ GET `/api/v1/me/schedule?view=today&date=2026-11-04` — выбранный де
 запись отклоняется, занятие и история меняются атомарно. Это не веб-кабинет сотрудника.
 Серии повторений, бронирование и поиск свободных комнат не реализованы.
 Модель корпусов/аудиторий/capacity/equipment/интервалов подготовлена для будущего поиска.
+
+
+## Успеваемость V5
+
+На новой демобазе сначала seed_demo, затем seed_schedule и seed_academics.
+Последний создаёт два семестра и персональные назначения, разделяет вымышленную
+программу группы Б (только demo-b) с программой А; существующие оценки не перезаписывает.
+`--as-of YYYY-MM-DD` предназначен для воспроизводимой демосреды; без него используется
+сегодня по Москве. Для демонстрации в другую дату лучше создать новую временную базу.
+Существующая V4-демобаза требует явного apply с новым backup перед seed_academics.
+Старые миграции не менялись, рабочая SQLite не используется.
+
+Защищённые GET без query-параметров:
+
+- `/api/v1/me/gradebook` — семестры, назначения, попытки, текущий прогресс,
+  предстоящие испытания и задолженности одним согласованным снимком;
+- `/api/v1/me/exams` — все свои назначенные экзамены/зачёты, включая прошедшие;
+- `/api/v1/me/debts` — подтверждённые задолженности обязательных испытаний всех семестров;
+- `/api/v1/me/progress` — текущий учебный период и его прогресс.
+
+В MVP «текущая сессия» — назначения семестра, содержащего сегодняшнюю московскую дату.
+Успех: экзамен/дифференцированный зачёт 3–5, зачёт — pass («Зачтено»).
+Оценка 2 / fail и явная неявка — задолженность. Без попытки задолженность возникает
+только при status=completed и явном deadline_on раньше сегодня; сам день срока ещё
+не просрочен. Будущие/непроведённые/неизвестные испытания и отсутствующая оценка
+различаются. Нет текущих обязательных назначений — «Нет данных», percent=null.
+Необязательные и отменённые испытания исключены из знаменателя.
+
+Прогресс = успешно завершённые / все обязательные неотменённые назначения текущего
+семестра ×100, округление до целого. Предстоящие, долги и ожидающие уточнения вместе
+с завершёнными образуют полный счётчик. Исторические долги показываются отдельно,
+не добавляются в знаменатель текущей сессии. Каждое назначение считается один раз.
+Последняя по номеру попытка определяет результат; новая попытка после успеха запрещена.
+Неуспех → успешная пересдача снимает долг, сохраняя обе попытки.
+
+Локальная запись результата для уже завершённого испытания отдельной демобазы:
+
+```powershell
+& .\.venv\Scripts\python.exe -B -m backend.commands.record_result --db .tmp/demo-v5.sqlite3 --assignment academic-b-0 --expected-attempts 1 --outcome graded --grade 4 --performed-on 2026-11-04 --confirm-demo
+```
+
+Дату примера заменить на фактическую дату попытки не раньше назначенного испытания
+и не позже сегодня. Для зачёта --outcome pass/fail без --grade; для неявки absent.
+Команда добавляет попытку атомарно, проверяет тип контроля, даты, число прошлых попыток
+и завершённость мероприятия. Исправление успешной оценки и управление датами/статусами
+мероприятий не входят в этот CLI; произвольной перезаписи истории нет.
+Это инструмент доверенного локального оператора, не веб-права сотрудника.
+Публичных POST/PUT/PATCH/DELETE оценок нет. Данные не сохраняются в localStorage.

@@ -40,3 +40,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .lesson-inactive { border-style: dashed; background: #24212d; }
 .change-badge { color: var(--purple); font-weight: 650; }
 .change-detail { color: var(--muted); font-size: 14px; }
+
+.academic-block { margin-top: 28px; overflow-wrap: anywhere; }
+.academic-percent { font-size: 24px; color: var(--mint); }
+progress { width: 100%; height: 16px; accent-color: var(--mint); }
+summary { cursor: pointer; padding: 12px 0; overflow-wrap: anywhere; }
+summary:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }

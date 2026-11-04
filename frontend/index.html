@@ -13,10 +13,10 @@
 <body>
 <main>
   <header>
-    <p class="eyebrow">MGIMO AI Challenge 2026 · V4</p>
+    <p class="eyebrow">MGIMO AI Challenge 2026 · V5</p>
     <h1>Цифровой деканат будущего</h1>
     <p class="notice">Конкурсный концепт. Неофициальный сервис. Все данные вымышлены</p>
-    <p class="muted">Независимая основа студенческого кабинета. Учебные сервисы появятся на следующих этапах.</p>
+    <p class="muted">Личный кабинет, расписание и успеваемость в одном месте.</p>
   </header>
   <div class="grid">
     <section class="card" aria-labelledby="connection-title">
@@ -46,7 +46,7 @@
       </div>
       <button id="logout-retry" type="button" hidden>Повторить выход</button>
       <button id="account-check" type="button">Проверить вход</button>
-      <p class="muted">Успеваемость, заявки и уведомления — в разработке.</p>
+      <p class="muted">Заявки и уведомления — в разработке.</p>
     </section>
   </div>
   <section id="schedule-section" class="card schedule-section" aria-labelledby="schedule-title" hidden>
@@ -67,6 +67,12 @@
       <button id="schedule-retry" type="button">Обновить</button>
     </div>
     <div id="schedule-days"></div>
+  </section>
+  <section id="academics-section" class="card schedule-section" aria-labelledby="academics-title" hidden>
+    <h2 id="academics-title">Успеваемость</h2>
+    <p id="academics-status" role="status" aria-live="polite"></p>
+    <button id="academics-retry" type="button">Обновить успеваемость</button>
+    <div id="academics-content"></div>
   </section>
   <noscript><p class="notice">Для проверки соединения включите JavaScript. Стартовая страница доступна без него.</p></noscript>
   <footer>Самостоятельный конкурсный прототип · Без подключений к внутренним системам университета</footer>

@@ -1,4 +1,5 @@
 import {requestJson} from './api.js';
+import {academicsIdentity} from './academics.js';
 import {scheduleIdentity} from './schedule.js';
 import {createAccountState} from './account-state.js';
 const get = id => document.getElementById(id);
@@ -13,6 +14,7 @@ const controller = createAccountState({request:requestJson,
   signalChange:()=>channel?.postMessage('identity-changing'),
   publish(value) {
     if (typeof scheduleIdentity === 'function') scheduleIdentity(null);
+    if (typeof academicsIdentity === 'function') academicsIdentity(null);
     profile.replaceChildren(); accountPanel.hidden = true; loginPanel.hidden = false;
     fields.disabled = value.state === 'loading' || value.state === 'logout-pending';
     get('account-check').disabled = value.state === 'loading';
@@ -22,6 +24,7 @@ const controller = createAccountState({request:requestJson,
     get('password').value = '';
     loginPanel.hidden = true; accountPanel.hidden = false;
     if (typeof scheduleIdentity === 'function') scheduleIdentity(value.user);
+    if (typeof academicsIdentity === 'function') academicsIdentity(value.user);
     get('account-title').textContent = value.user.role === 'student' ? 'Профиль студента' : 'Учётная запись сотрудника';
     const labels = {full_name:'ФИО',faculty:'Факультет',program:'Программа',course:'Курс',study_group:'Группа',position:'Должность'};
     for (const [key,label] of Object.entries(labels)) {
