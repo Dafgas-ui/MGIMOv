@@ -1,16 +1,19 @@
-"""One origin, explicit static assets, no personal-data endpoints."""
+"""One origin, explicit assets and protected V3 identity routes."""
 import sqlite3
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from .config import ROOT, Settings
-from .db import connection
-from .migrations.manager import MigrationError, status
+from .auth.routes import install_identity
+from .migrations.manager import MigrationError
+from .health import Readiness
 
 ASSETS = {
     "/": ("index.html", "text/html"),
     "/css/tokens.css": ("css/tokens.css", "text/css"),
     "/css/base.css": ("css/base.css", "text/css"),
     "/js/app.js": ("js/app.js", "text/javascript"),
+    "/js/account.js": ("js/account.js", "text/javascript"),
+    "/js/account-state.js": ("js/account-state.js", "text/javascript"),
     "/js/api.js": ("js/api.js", "text/javascript"),
     "/js/utils/dates.js": ("js/utils/dates.js", "text/javascript"),
 }
@@ -21,17 +24,14 @@ def create_app(settings: Settings | None = None):
     settings = settings or Settings.from_environment()
     application = FastAPI(title="Цифровой деканат — конкурсный концепт", docs_url=None, redoc_url=None, openapi_url=None)
     application.state.settings = settings
+    install_identity(application,settings)
+    readiness = Readiness(settings)
 
     @application.get("/api/health")
     def health():
         try:
-            state = status(settings.database)
-            if state["pending"] or state["state"] != "managed":
-                raise MigrationError("Schema not ready")
-            with connection(settings) as database:
-                row = database.execute("SELECT value FROM app_metadata WHERE key='application'").fetchone()
-                if row is None or row["value"] != "mgimov":
-                    raise MigrationError("Unexpected application database")
+            if not readiness.check():
+                raise MigrationError('Schema not ready')
         except (OSError, sqlite3.Error, MigrationError):
             return JSONResponse({"status": "unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
         return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})

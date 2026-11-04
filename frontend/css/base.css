@@ -14,3 +14,13 @@ button:disabled { opacity: .65; cursor: wait; }
 button:focus-visible { outline: 3px solid var(--mint); outline-offset: 4px; }
 footer { margin-top: 32px; font-size: 14px; }
 @media (max-width: 600px) { main { padding: 28px 16px; } .grid { grid-template-columns: 1fr; } .card { padding: 20px; } button { width: 100%; } }
+
+[hidden] { display: none !important; }
+fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+label { display: block; margin: 12px 0 6px; }
+input { display: block; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text); padding: 10px; font: inherit; }
+input:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+#login-form button, #account-check, #logout-retry { margin-top: 16px; }
+dt { color: var(--muted); margin-top: 12px; }
+dd { margin: 0; overflow-wrap: anywhere; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

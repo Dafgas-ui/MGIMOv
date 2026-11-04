@@ -8,11 +8,12 @@
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/base.css">
   <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/account.js"></script>
 </head>
 <body>
 <main>
   <header>
-    <p class="eyebrow">MGIMO AI Challenge 2026 · V2</p>
+    <p class="eyebrow">MGIMO AI Challenge 2026 · V3</p>
     <h1>Цифровой деканат будущего</h1>
     <p class="notice">Конкурсный концепт. Неофициальный сервис. Все данные вымышлены</p>
     <p class="muted">Независимая основа студенческого кабинета. Учебные сервисы появятся на следующих этапах.</p>
@@ -23,10 +24,29 @@
       <p id="server-status" role="status" aria-live="polite">Проверяем соединение…</p>
       <button id="retry" type="button">Повторить проверку</button>
     </section>
-    <section class="card" aria-labelledby="next-title">
-      <h2 id="next-title">Следующий этап</h2>
-      <p>Вход, профиль и разделение данных двух вымышленных студентов.</p>
-      <p class="muted">На этапе V2 авторизация и учебные модули ещё не реализованы.</p>
+    <section class="card" aria-labelledby="identity-title">
+      <h2 id="identity-title">Личный кабинет</h2>
+      <p id="account-message" role="status" aria-live="polite">Проверяем вход…</p>
+      <div id="login-panel">
+        <form id="login-form">
+          <fieldset id="login-fields">
+            <legend class="sr-only">Вход в кабинет</legend>
+            <label for="login">Логин</label>
+            <input id="login" name="username" autocomplete="username" required minlength="3" maxlength="64" autocapitalize="none" spellcheck="false">
+            <label for="password">Пароль</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="128">
+            <button type="submit">Войти</button>
+          </fieldset>
+        </form>
+      </div>
+      <div id="account-panel" hidden>
+        <h3 id="account-title">Профиль</h3>
+        <dl id="profile-details"></dl>
+        <button id="logout" type="button">Выйти</button>
+      </div>
+      <button id="logout-retry" type="button" hidden>Повторить выход</button>
+      <button id="account-check" type="button">Проверить вход</button>
+      <p class="muted">Расписание, успеваемость, заявки и уведомления — в разработке.</p>
     </section>
   </div>
   <noscript><p class="notice">Для проверки соединения включите JavaScript. Стартовая страница доступна без него.</p></noscript>

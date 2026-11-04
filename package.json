@@ -1,1 +1,7 @@
-{"private":true,"type":"module","scripts":{"test":"node --test tests/dates.test.js tests/api.test.js"}}
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js"
+  }
+}

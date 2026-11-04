@@ -4,10 +4,10 @@ import sqlite3
 from .config import Settings
 
 @contextmanager
-def connection(settings: Settings, *, write=False):
+def connection(settings: Settings, *, write=False, timeout=5):
     path = settings.database.resolve(strict=True)
     database = sqlite3.connect(path.as_uri() + ("?mode=rw" if write else "?mode=ro"),
-                               uri=True, isolation_level=None, timeout=5)
+                               uri=True, isolation_level=None, timeout=timeout)
     database.row_factory = sqlite3.Row
     try:
         database.execute("PRAGMA foreign_keys=ON")
