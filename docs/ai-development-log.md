@@ -72,3 +72,28 @@ V4 оставлен для независимой приёмки, V5 не нач
 Никаких субагентов, новых зависимостей, изменений working DB, push или V6.
 Критерии deanery-acceptance-test применены к проверкам разработчика; независимый PASS
 не присваивается. Полный Security Review не проводился.
+
+
+## V6 — 4 ноября 2026 (МСК), Sol
+
+Проверен и зафиксирован V5 `31a8ed8f57e80577caca9e8fd91ee3465092f065`, повторно
+70 Python/23 JS, exit 0; независимый PASS не получен. Реализованы 0005_requests,
+персональные обращения, факультетная очередь staff, CSRF mutations, idempotency,
+квоты, version/history, demo seed, адаптивный UI. Без дополнительных библиотек/агентов.
+Проверки разработчика: 90 Python/29 JS, HTTP A/B/staff, IAB 360×800/1280×900.
+[Доказательства и ограничения](test-results.md#v6--проверки-разработчика-sol).
+Критерии deanery-acceptance-test и deanery-security-review применены к функциональным
+и целевым security-регрессиям V6; это не независимый PASS или полный повторный аудит.
+V6 оставлен незакоммиченным для независимой приёмки. V7 не начат.
+
+
+## AUD-01 / AUD-02 — 5 ноября 2026 (МСК), Sol
+
+Пользователь передал независимый результат Astra High V3–V6 и разрешил два P2 UX-fix,
+регрессии и commit V6. Сохранены все существующие V6-файлы. Добавлены memory-only
+staff drafts и технический retry marker в sessionStorage, без содержимого/credentials,
+с проверкой account/type/TTL и существующей server idempotency. Действия не auto-retry.
+Целевые 13 JS + реальный HTTP, полный 90 Python/36 JS, IAB manual/minute staff refresh
+и оборванный ответ + reload/retry. [Доказательства](test-results.md#aud-01--aud-02--5-ноября-2026).
+Новых миграций/backend requests logic/библиотек/субагентов/V7/SMTP/deploy нет.
+Повторная независимая проверка не присваивается Sol; public NOT VERIFIED.

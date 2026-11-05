@@ -1,28 +1,29 @@
-# Цифровой деканат будущего — V5
+# Цифровой деканат будущего — V6
 
 Конкурсный концепт. Неофициальный сервис. Все данные вымышлены.
 
 Самостоятельное приложение: Python 3.13/FastAPI, SQLite, HTML/CSS/JavaScript ES modules.
 Реализованы вход, серверные сессии, роли student/staff и собственные профили.
-Реализованы групповое расписание и история изменений. Реализованы личная зачётка, экзамены, задолженности и прогресс. Заявки и уведомления ещё не реализованы. Конкурсный MVP не готов.
+Реализованы групповое расписание и история изменений. Реализованы личная зачётка, экзамены, задолженности и прогресс. Реализованы электронные заявки и ограниченная очередь сотрудника. Уведомления ещё не реализованы. Конкурсный MVP не готов.
 
 ## Подготовка изолированной демонстрационной среды (PowerShell)
 
 Команды выполняются из корня проекта. Новая база должна иметь новый путь;
 существующие файлы не перезаписываются. Рабочую data/deanery.sqlite3 V2 не мигрировать
-без отдельного решения. Для V5 по умолчанию старой базы недостаточно: health=503.
+без отдельного решения. Для V6 по умолчанию старой базы недостаточно: health=503.
 
 ```powershell
 # Только если окружение ещё не подготовлено:
 python -m venv .venv
 python -m pip --python .venv install -r requirements.txt
 
-$env:MGIMOV_DB_PATH = '.tmp/demo-v5.sqlite3'
+$env:MGIMOV_DB_PATH = '.tmp/demo-v6.sqlite3'
 $env:MGIMOV_ORIGIN = 'http://127.0.0.1:8010'
 & .\.venv\Scripts\python.exe -B -m backend.migrations init
-& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-v5.sqlite3 --confirm-demo
-& .\.venv\Scripts\python.exe -B -m backend.commands.seed_schedule --db .tmp/demo-v5.sqlite3 --confirm-demo
-& .\.venv\Scripts\python.exe -B -m backend.commands.seed_academics --db .tmp/demo-v5.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-v6.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_schedule --db .tmp/demo-v6.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_academics --db .tmp/demo-v6.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_requests --db .tmp/demo-v6.sqlite3 --confirm-demo
 & .\.venv\Scripts\python.exe -B -m uvicorn backend.app:app --host 127.0.0.1 --port 8010 --no-proxy-headers
 ```
 
@@ -83,7 +84,7 @@ Startup не создаёт базу/схему; health сообщает гот�
 ```powershell
 python -m pip --python .venv install -r requirements-test.txt
 & .\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
-node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js tests/academics.test.js
+node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js tests/academics.test.js tests/requests.test.js
 Get-ChildItem frontend/js -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
 ```
 
@@ -91,8 +92,8 @@ Node.js 24, без npm-зависимостей. Тесты создают то�
 HTTP-тесты запускают собственные loopback-серверы на свободных портах и завершают их.
 В ограниченной песочнице могут потребоваться разрешения локального запуска.
 Hardening изменил health на лёгкую readiness (без integrity_check/проигрывания схемы).
-Полная проверка: `python -B -m backend.commands.diagnose --db .tmp/demo-v5.sqlite3`.
-Ограниченная явная очистка: `python -B -m backend.commands.cleanup_sessions --db .tmp/demo-v5.sqlite3 --limit 100 --confirm-cleanup`.
+Полная проверка: `python -B -m backend.commands.diagnose --db .tmp/demo-v6.sqlite3`.
+Ограниченная явная очистка: `python -B -m backend.commands.cleanup_sessions --db .tmp/demo-v6.sqlite3 --limit 100 --confirm-cleanup`.
 Использовать Python новой .venv; команды не выполняются автоматически.
 Предупреждение Starlette/httpx сохраняется, зависимости не обновлялись.
 Требования к будущему хостингу — [deployment-security.md](docs/deployment-security.md);
@@ -128,7 +129,7 @@ GET `/api/v1/me/schedule?view=today&date=2026-11-04` — выбранный де
 версией и причиной (примеры относятся только к созданной демобазе):
 
 ```powershell
-& .\.venv\Scripts\python.exe -B -m backend.commands.change_lesson --db .tmp/demo-v5.sqlite3 --lesson demo-a-4 --version 1 --reason "Демонстрационная отмена" --status cancelled --confirm-change
+& .\.venv\Scripts\python.exe -B -m backend.commands.change_lesson --db .tmp/demo-v6.sqlite3 --lesson demo-a-4 --version 1 --reason "Демонстрационная отмена" --status cancelled --confirm-change
 ```
 
 Перенос: `--date YYYY-MM-DD --start-minute 660 --end-minute 750`;
@@ -174,7 +175,7 @@ GET `/api/v1/me/schedule?view=today&date=2026-11-04` — выбранный де
 Локальная запись результата для уже завершённого испытания отдельной демобазы:
 
 ```powershell
-& .\.venv\Scripts\python.exe -B -m backend.commands.record_result --db .tmp/demo-v5.sqlite3 --assignment academic-b-0 --expected-attempts 1 --outcome graded --grade 4 --performed-on 2026-11-04 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.record_result --db .tmp/demo-v6.sqlite3 --assignment academic-b-0 --expected-attempts 1 --outcome graded --grade 4 --performed-on 2026-11-04 --confirm-demo
 ```
 
 Дату примера заменить на фактическую дату попытки не раньше назначенного испытания
@@ -184,3 +185,89 @@ GET `/api/v1/me/schedule?view=today&date=2026-11-04` — выбранный де
 мероприятий не входят в этот CLI; произвольной перезаписи истории нет.
 Это инструмент доверенного локального оператора, не веб-права сотрудника.
 Публичных POST/PUT/PATCH/DELETE оценок нет. Данные не сохраняются в localStorage.
+
+
+## Электронные заявки V6
+
+На отдельной демобазе после seed_demo выполните seed_requests (см. полный запуск выше).
+Seed создаёт четыре вымышленных обращения: submitted/processing/approved/rejected,
+и явное право staff_demo обрабатывать только факультет demo-f. Повторный seed не
+перезаписывает заявки или права. Рабочая SQLite не менялась. Для существующей V5-демобазы
+сначала явный apply с новым backup; старые миграции не редактировать.
+
+В кабинете ссылка «Перейти к обращениям» открывает раздел без прокрутки всей зачётки.
+Студент: «Создать заявку» → тип → назначение справки (кроме свободного обращения)
+и комментарий → «Отправить заявку». Доступны список, детали, статус, история и
+комментарии сотрудника. Новую заявку можно отменить только до начала обработки.
+Черновиков нет: несданная форма остаётся лишь в текущей вкладке при проверке того же
+аккаунта; при выходе/смене/ошибке проверки входа очищается. Перезагрузка её не сохраняет.
+Сотрудник: очередь доступных факультетов → детали → действие и обязательный комментарий.
+Запрос уточнения и редактирование текста после отправки не входят в MVP.
+Одобрение не выпускает официальную справку, подписи, печати или PDF.
+
+Статусы и переходы:
+
+| Роль | Из | В | Условие |
+|---|---|---|---|
+| Студент | новая отправка | submitted | Владелец/факультет из серверного профиля |
+| Студент | submitted | cancelled | Только своя заявка |
+| Сотрудник | submitted | processing | Явный доступ к факультету заявки |
+| Сотрудник | processing | approved / rejected | Обязательный комментарий / причина |
+
+approved/rejected/cancelled — терминальные, возврата в работу нет. Каждое изменение
+проверяет version, увеличивает её на 1 и атомарно добавляет автора/роль/время/комментарий
+в append-only историю. При устаревшей версии — 409, нужно обновить детали.
+
+API (все ответы no-store):
+
+- GET/POST `/api/v1/me/requests` — собственный список / создание;
+- GET `/api/v1/me/requests/{id}` — свои детали;
+- POST `/api/v1/me/requests/{id}/cancel` — `{version, comment?}`;
+- GET `/api/v1/staff/requests` и `/{id}` — очередь / детали в явной области доступа;
+- POST `/api/v1/staff/requests/{id}/decision` — `{version, action, comment}`.
+
+Списки принимают только одиночный offset (по умолчанию 0), по 20 записей,
+возвращают next_offset; интерфейс содержит переходы страниц. Детали/POST query не принимают.
+Создание: `{type, purpose, message, request_key}`. Типы study_certificate,
+general_certificate, appeal. purpose до 200 символов, обязателен для справки и пуст
+для appeal; message 1–2000, комментарий решения 1–1000; общий body до 8192 байт.
+Пробельные обязательные поля и запрещённые управляющие символы отклоняются.
+
+request_key — криптографически случайные 32 hex-символа для одной отправки.
+До POST в sessionStorage этой вкладки сохраняются только ключ, тип формы, срок
+действия (24 часа) и SHA-256 тег привязки к аккаунту с этим случайным ключом.
+Текст, UUID пользователя, имена, пароли, cookies и содержимое форм туда не попадают. Повтор того же нормализованного содержимого с тем же ключом вернёт
+тот же объект (200 вместо 201), даже после изменения его статуса. Другое содержимое
+с тем же ключом — 409. При неопределённом результате сначала проверьте список. После reload и
+подтверждения того же аккаунта интерфейс предложит повторить те же поля с прежним
+ключом. Текст надо ввести снова. Изменённое содержимое с ключом уже сохранённой
+заявки даёт 409, не новую запись. Для отдельной осознанной заявки есть кнопка
+«Начать отдельную заявку»; после подтверждённой отправки следующая тоже получает новый ключ.
+Logout удаляет технический маркер, другой аккаунт его не восстанавливает. При
+истечении сессии маркер не даёт доступа: сначала повторный вход того же пользователя.
+Закрытие вкладки обычно очищает sessionStorage; восстановление вкладок зависит от
+браузера. При отсутствии/истечении/повреждении маркера сначала проверьте список.
+При заблокированном хранилище отправка приостанавливается, новый ключ молча не отправляется.
+Двойной клик блокируется на клиенте, уникальность и атомарность обеспечены сервером.
+Лимит создания на студента: 5 за скользящие 600 секунд и 20 за 86400 секунд;
+отменённые учитываются, повторы по ключу квоту не расходуют. Превышение — 429.
+
+Staff не получает автоматические права по одному значению роли. Область задаётся
+request_staff_scopes, в демосреде — локальным seed. Отсутствие scope даёт пустую очередь
+и 404 для недоступной заявки. Веб-редактора полномочий и универсальной админ-панели нет.
+Факультет фиксируется при отправке заявки. Студент всегда читает её по своему server user.id.
+POST требует existing session-bound CSRF cookie/header, exact Origin и JSON.
+
+
+### Исправления AUD-01 / AUD-02
+
+Несданный комментарий сотрудника хранится только в памяти, отдельно для сотрудника
+и обращения. Он переживает ручную/фоновую проверку того же входа, обновление деталей,
+сетевую ошибку и 409. Действие автоматически не повторяется. После подтверждённого
+успешного решения комментарий очищается; если заявку завершил другой сотрудник,
+сохранённый текст можно скопировать из поля только для чтения. Выход, смена аккаунта
+и перезагрузка очищают эти комментарии. localStorage не используется.
+
+По сообщению пользователя от 5 ноября 2026 аудит Astra High подтвердил V3/V6
+PASS WITH WARNINGS, V4/V5 PASS, 90 Python/29 JS; найденные P2 UX-проблемы исправлены
+Sol. Это не независимый повторный аудит исправлений. Публичное размещение — NOT VERIFIED.

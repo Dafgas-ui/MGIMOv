@@ -280,3 +280,171 @@ DOM renderer — с минимальной fixture, не настоящим бр
 TLS/proxy/perimeter/backup recovery/лицензии/полный Security Review не проверены.
 Сохраняются NAT/distributed/source/SQLite single-writer риски V3 и Starlette/httpx warning.
 V5 готов к независимой функциональной приёмке; публичная готовность не заявляется.
+
+
+## V6 — проверки разработчика Sol
+
+4 ноября 2026 (МСК), база `31a8ed8f57e80577caca9e8fd91ee3465092f065`
++ рабочее дерево V6. Перед локальным commit V5 повторно 70 Python/23 JS, exit 0;
+проверены 24 файла, staged/selected secret patterns, runtime/базы/логи не включены.
+Независимые приёмки V4/V5/V6 не выполнялись данным чатом и не присваиваются Sol.
+
+### Автоматические проверки
+
+- `.venv/Scripts/python.exe -B -m unittest discover -s tests -q`: **90/90 Python,
+  exit 0**, без пропусков (20 новых V6 + 70 регрессий V2–V5).
+- `node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js tests/academics.test.js tests/requests.test.js`:
+  **29/29 JS, exit 0**, без пропусков (6 новых + 23 регрессии).
+- Python AST backend/tests и `node --check` всех frontend JS: exit 0.
+- Первый полный Python-прогон: 88 успешных, 2 сбоя старых ожиданий. V5 upgrade-тест
+  предполагал последнюю миграцию 0004 вместо новой 0005; V3-тест ожидал 404 у ещё не
+  существовавшего staff/requests вместо теперь корректного 403 студенту. Assertions
+  обновлены под согласованную V6-функциональность, повторный полный прогон успешен.
+- Все SQLite — временные файлы в .tmp, не рабочая база. Starlette/httpx warning
+  сохраняется, зависимости не менялись. Mocks используются для ошибки history и
+  стоимости Argon при создании TestClient app; реальные SQLite/auth/CSRF проходят.
+
+| Требование V6 (ID локальные по заданию пользователя) | Доказательство | Результат / граница |
+|---|---|---|
+| V6-CREATE: три типа, поля и server owner | tests/test_requests.py: create_own_list_details_and_server_author, validation | 201; все три типа, owner/faculty/actor из сервера; не официальные документы |
+| V6-READ: свои списки/детали и изоляция | two_students_idor, anonymous_student_admin | A/B отдельны; чужой ID read/cancel=404, аноним=401, student→staff=403 |
+| V6-STAFF: ограниченные полномочия | staff_scope, staff_guard, mutation_rechecks_live_identity | Пустая очередь без scope; foreign/revoked scope=404; отключение staff до writer=401 |
+| V6-STATUS: обработка/решение/отмена | status_machine, cancel_only_submitted | submitted→processing→approved/rejected, submitted→cancelled; terminal/stale=409 |
+| V6-HISTORY: атомарность и автор | history_failure, concurrent_two_staff | Искусственный сбой history=503 с rollback; UPDATE/DELETE истории запрещены; authors/versions сохранены |
+| V6-CSRF: mutations | csrf_origin_content_type_and_staff_no_store, staff_guard | Missing/wrong token и foreign origin=403, дубли headers=400, non-JSON=415, body overflow=413 |
+| V6-RETRY: повторы и лимиты | repeat_same_payload, concurrent_same_create, persistent_create_limit, daily_quota | Один owner/key → одна строка; иной payload=409; 5/600s, 20/86400s, отменённые учитываются |
+| V6-PAGES: пустые и длинные списки | empty_and_pagination | empty, 20+1 записи, offset/next_offset, следующий день квоты |
+| V6-MIGRATE | migration_existing_v5_preserves_data и fixtures init | Пустая новая схема и upgrade V5 с backup/сохранённым маркером, FK check пуст |
+| V6-UI: текст/ошибки/identity/двойной клик | tests/requests.test.js | DOM-fixture renderer; memory state/timeout/late/roles/версии/идемпотентный retry |
+
+### Реальные HTTP и браузер
+
+`test_real_http_two_students_staff_and_decision`: собственный Uvicorn на свободном
+loopback-порту, отдельная временная SQLite и три независимых httpx клиента.
+A создаёт, повторяет тем же ключом (201/200); B получает 404 на заявку A;
+A запрещён staff queue (403), сотрудник переводит в processing/approved (200),
+студент получает итог и 3 события. Staff ответы no-store. Аноним=401.
+Сервер завершается finally; лог проверен на отсутствие сгенерированных паролей.
+V2–V5 реальные HTTP-регрессии также пройдены.
+
+IAB, `.tmp/v6-browser.sqlite3`, loopback 8046, только вымышленные данные.
+360×800: A создаёт справку, заполненные поля сохраняются после «Проверить вход»,
+содержимое `<b>…</b>` показывается буквальным текстом; отмена даёт version=2 и историю.
+Logout очищает учебные данные и обращения. B видит другой список, отказ с причиной
+и автором. Reload сохраняет сессию/серверные заявки. Staff видит свою факультетную
+очередь, переводит новую заявку B в обработку и затем одобряет с комментарием;
+B после входа получает решение и авторов/время/историю. Student/staff формы проверены
+при 360 px, одобрение и детали также при 1280×900. scrollWidth 345/1265 при width
+360/1280 — переполнения в проверенных состояниях нет. Enter по «Перейти к обращениям»
+перемещает к разделу; проверена не вся клавиатура/доступность.
+После остановки сервера «Обновить обращения» показывает безопасную ошибку и удаляет
+старые карточки. Скриншоты .tmp/v6-mobile.png, .tmp/v6-wide.png не включены в Git.
+Viewport сброшен, вкладка закрыта, PID 23728/порт 8046 завершены;
+временные users отключены, sessions отозваны.
+
+### Целевые регрессии безопасности V6 (восемь направлений навыка)
+
+Проверены изменённые маршруты/общие guards и связанные регрессии. Это проверка
+разработчика по deanery-security-review, не независимый полный аудит или доказательство
+безопасности всей системы. Динамические операции разрешены заданием только во временной среде.
+
+| Направление | Проверенные участки / доказательства | Граница |
+|---|---|---|
+| Авторизация/сессии | auth/service.py resolve; requests/service.py identity/preflight + повтор под writer; тест disable-before-write | Модель токенов/TTL не менялась, регрессии V3 пройдены |
+| Пароли/credentials | passwords.py и login не менялись; V3 Argon/hash/limits тесты пройдены, selected secret patterns | Не полный аудит зависимостей или recovery |
+| Изоляция A/B | read_requests, authorized_request SQL; HTTP A/B read/cancel/queue | Проверена новая поверхность заявок, будущие уведомления вне этапа |
+| IDOR | owner predicate/EXISTS scopes; query/JSON/client-owner/role отрицательные тесты | UUID сам по себе не считается защитой |
+| Полномочия | request_staff_scopes, identity(role), TRANSITIONS; no-scope/foreign/revoked scope | Веб-редактор scopes и staff доступ к оценкам отсутствуют |
+| CSRF/cookies/API | staff prefix IdentityGuard + validation, verify_csrf в mutation; Origin/JSON/body/no-store тесты | TLS/reverse proxy не проверены; параметры cookies V3 сохранены |
+| Утечки | public_request/details исключают key/hash/owner ID/credentials; textContent renderer; generic 422/503 и логи HTTP | Staff видит имя/группу только в контексте разрешённого обращения |
+| Регрессии | 90 Python/29 JS, реальные SQLite/HTTP; mutation history rollback и два сотрудника | Не нагрузочная приёмка и не публичная инфраструктура |
+
+Подтверждённых нарушений изоляции/CSRF или блокирующих функциональных ошибок в
+выполненных сценариях не обнаружено. Исправлено стирание незавершённой формы при
+refresh identity: теперь она сохраняется только для того же подтверждённого владельца.
+Восемь направлений не заменяют отложенный независимый аудит V3/V4/V5/V6.
+
+### Ограничения
+
+Нет независимого PASS, полной визуальной/клавиатурной/скринридер QA, реальных мобильных
+устройств/других браузеров, browser timeout/сетевой offline-эмуляции и нагрузки.
+Ошибку соединения проверяли остановкой сервера, JS timeout — mock request с abort.
+DOM-fixture не объявляется браузером. Одновременное cancel/decision не тестировалось
+отдельным гоняющим нагрузку сценарием; version/writer-путь общий с проверенными гонками.
+Offset-пагинация при новых поступлениях может смещать страницы. Ключ отправки только
+в памяти: после reload/новой вкладки или изменения содержания сначала проверить список,
+автоматической дедупликации с прежним ключом нет. Черновики/needs_info/вложения/официальные
+справки/назначение staff scopes через web вне V6. Комментарий сотрудника, ещё не
+отправленный, не сохраняется при обновлении деталей.
+SQLite остаётся single-writer, NAT/distributed/source risks и Starlette/httpx warning
+сохраняются. TLS/proxy/backup recovery/публичный периметр/лицензии не проверены.
+Рабочая SQLite и старые SQL не менялись. V6 готов к независимой функциональной приёмке,
+не к публичному размещению; V7 не начат.
+
+
+## AUD-01 / AUD-02 — 5 ноября 2026
+
+Источник находок и независимых результатов — задание пользователя от 5 ноября:
+Astra High, V3/V6 PASS WITH WARNINGS, V4/V5 PASS, 90 Python/29 JS; P0/P1 не найдены,
+public deploy NOT VERIFIED. Точные дата/ревизия аудита не предоставлены. Ниже — новые
+проверки Sol в V5 HEAD 31a8ed8 + рабочем дереве V6/AUD, а не независимый повторный аудит.
+
+Причины подтверждены: requests.js пересоздавал staff textarea без памяти ввода;
+requests-state.js хранил retry key лишь в instance. Server owner/key/payload_hash
+и атомарность корректны и не изменялись.
+
+### Выполнено
+
+1. Целевой `node --test tests/requests.test.js`: **13/13, exit 0**, включая 7 новых AUD.
+   Owner/request staff draft при manual/background suspend, network/409, switch/logout,
+   success; actual DOM renderer восстанавливает value, terminal conflict read-only.
+   Потеря результата после simulated commit + новый controller + те же sessionStorage
+   metadata = одна запись; изменённый текст конфликтует, другая форма не отправляется
+   молча, явная новая операция создаётся отдельно. Account switch/logout/TTL/corruption/
+   denied storage, metadata shape без текста/raw account ID, отсутствие ключа в URL.
+2. Целевой `.venv/Scripts/python.exe -B -m unittest tests.test_requests.RequestTests.test_real_http_two_students_staff_and_decision -q`:
+   **1/1, exit 0**. Дополнен Node bridge tests/request-recovery-http.mjs: настоящий
+   frontend controller/crypto и Uvicorn/SQLite, cookie/CSRF передаются только stdin,
+   не argv/логи. Ответ первого сохранённого POST намеренно не передаётся контроллеру;
+   новый controller восстанавливает old key, изменённый текст=409, исходный=200,
+   новая намеренная заявка=201. Совпадение key проверяется без вывода его значений.
+3. Полный `.venv/Scripts/python.exe -B -m unittest discover -s tests -q`:
+   **90/90, exit 0**, без пропусков; сохранены A/B/faculty/CSRF/IDOR/atomic history/
+   concurrency/quotas. Python-тестов не добавлялось, расширен существующий real HTTP.
+4. Полный `node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js tests/academics.test.js tests/requests.test.js`:
+   **36/36, exit 0**, без пропусков (29 прежних + 7 новых).
+5. Python AST backend/tests и node --check frontend/tests JS/MJS; Git diff/check,
+   ссылки и protected hashes рабочей SQLite/SQL/AGENTS/Skills/config проверяются перед commit.
+   Известное Starlette/httpx warning осталось; установки зависимостей нет.
+
+### Реальный браузер
+
+IAB, временная .tmp/aud-browser.sqlite3, loopback 8047, только синтетические данные.
+Middleware исключительно тестового стенда оборвал тело HTTP 201 после commit (часть
+JSON и закрытие соединения). Студент увидел ошибку и сообщение о неподтверждённой
+отправке. После reload маркер восстановился без текста, повтор введённых тех же полей
+вернул прежний request/version=1; прямое чтение тестовой SQLite подтвердило **одну** запись.
+
+Staff: комментарий пережил «Проверить вход». Затем без ручного действия прошли 73 секунды;
+access log зарегистрировал новый GET auth/me от минутного poll, поле сохранило текст.
+Другая заявка имела пустое поле, возврат восстановил прежнее. После подтверждённого
+успешного действия ни editable, ни retained draft нет; после logout/login поле пусто.
+360×800 и 1280×900: scrollWidth 345/1265 при width 360/1280, переполнения в проверенных
+состояниях нет. Screenshot .tmp/aud-staff.png без технических ключей, не в Git.
+Viewport сброшен, вкладка закрыта; временный сервер и аккаунты отключены после проверки.
+
+### Ограничения и остаточные риски
+
+Browser 409/network для staff, второй сотрудник, blocked storage/TTL и закрытие с
+повторным восстановлением вкладки не проверялись вручную; соответствующие логические
+сценарии покрыты JS, права/конкуренция двух сотрудников — Python. Реальный minute poll
+и потеря тела ответа проверены отдельно от mocks. Browser sessionStorage после закрытия
+вкладки/перезапуска зависит от браузера; без доступного маркера нельзя доказать исход
+прежней отправки, UI предлагает сначала проверить список. Staff draft не переживает
+reload и не сохраняется на диск. Технический marker не является auth credential,
+доступ к чужим заявкам по нему не предоставляется. Данные/пароли/cookies не пишутся
+в хранилище; localStorage не используется. При отказе записи нового marker POST не идёт.
+
+Это исправления Sol; независимая повторная проверка AUD-01/02 не выполнена. Нагрузка/DoS
+не запускались. Полная accessibility, TLS/proxy/public perimeter, восстановление backups
+и эксплуатационные настройки не подтверждены; public deploy остаётся NOT VERIFIED.

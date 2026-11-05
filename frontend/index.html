@@ -13,7 +13,7 @@
 <body>
 <main>
   <header>
-    <p class="eyebrow">MGIMO AI Challenge 2026 · V5</p>
+    <p class="eyebrow">MGIMO AI Challenge 2026 · V6</p>
     <h1>Цифровой деканат будущего</h1>
     <p class="notice">Конкурсный концепт. Неофициальный сервис. Все данные вымышлены</p>
     <p class="muted">Личный кабинет, расписание и успеваемость в одном месте.</p>
@@ -43,10 +43,11 @@
         <h3 id="account-title">Профиль</h3>
         <dl id="profile-details"></dl>
         <button id="logout" type="button">Выйти</button>
+        <p><a href="#requests-section">Перейти к обращениям</a></p>
       </div>
       <button id="logout-retry" type="button" hidden>Повторить выход</button>
       <button id="account-check" type="button">Проверить вход</button>
-      <p class="muted">Заявки и уведомления — в разработке.</p>
+      <p class="muted">Уведомления — в разработке.</p>
     </section>
   </div>
   <section id="schedule-section" class="card schedule-section" aria-labelledby="schedule-title" hidden>
@@ -73,6 +74,39 @@
     <p id="academics-status" role="status" aria-live="polite"></p>
     <button id="academics-retry" type="button">Обновить успеваемость</button>
     <div id="academics-content"></div>
+  </section>
+  <section id="requests-section" class="card schedule-section" aria-labelledby="requests-title" hidden>
+    <h2 id="requests-title">Мои обращения</h2>
+    <p id="requests-status" role="status" aria-live="polite"></p>
+    <div id="request-recovery" class="notice" hidden>
+      <p id="request-recovery-text"></p>
+      <p>Текст не сохраняется. Для отдельного обращения сначала проверьте список, затем начните новую отправку.</p>
+      <button id="request-new-operation" type="button">Начать отдельную заявку</button>
+    </div>
+    <div class="schedule-toolbar">
+      <button id="request-new" type="button">Создать заявку</button>
+      <button id="requests-retry" type="button">Обновить обращения</button>
+    </div>
+    <form id="request-create-form" hidden>
+      <fieldset id="request-fields">
+        <legend>Новое обращение</legend>
+        <p class="muted">Это форма отправки, без сохранения черновика. Не вводите реальные персональные сведения. Если вкладка закрывалась после отправки, сначала проверьте список обращений.</p>
+        <label for="request-type">Тип обращения</label>
+        <select id="request-type">
+          <option value="study_certificate">Справка об обучении</option>
+          <option value="general_certificate">Справка по месту требования</option>
+          <option value="appeal">Свободное обращение</option>
+        </select>
+        <div id="request-purpose-field">
+          <label for="request-purpose">Назначение справки</label>
+          <input id="request-purpose" maxlength="200" required>
+        </div>
+        <label for="request-message">Комментарий / содержание обращения</label>
+        <textarea id="request-message" maxlength="2000" rows="4" required></textarea>
+        <button type="submit">Отправить заявку</button>
+      </fieldset>
+    </form>
+    <div id="requests-content"></div>
   </section>
   <noscript><p class="notice">Для проверки соединения включите JavaScript. Стартовая страница доступна без него.</p></noscript>
   <footer>Самостоятельный конкурсный прототип · Без подключений к внутренним системам университета</footer>

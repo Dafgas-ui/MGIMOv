@@ -46,3 +46,14 @@ dd { margin: 0; overflow-wrap: anywhere; }
 progress { width: 100%; height: 16px; accent-color: var(--mint); }
 summary { cursor: pointer; padding: 12px 0; overflow-wrap: anywhere; }
 summary:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+
+select, textarea { width: 100%; min-width: 0; color: var(--text); background: var(--background); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font: inherit; margin: 8px 0 16px; }
+textarea { resize: vertical; }
+select:focus-visible, textarea:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+.request-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-history { padding-left: 22px; border-left: 2px solid var(--border); }
+.request-history li { margin-bottom: 20px; }
+.request-detail { margin-top: 24px; overflow-wrap: anywhere; }
+
+a { color: var(--mint); }
+a:focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; }

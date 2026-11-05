@@ -10,7 +10,7 @@ class IdentityGuard:
 
     async def __call__(self,scope,receive,send):
         path=scope.get('path','')
-        if scope['type']!='http' or not path.startswith(('/api/v1/auth/','/api/v1/me/')):
+        if scope['type']!='http' or not path.startswith(('/api/v1/auth/','/api/v1/me/','/api/v1/staff/')):
             return await self.app(scope,receive,send)
         headers=Headers(scope=scope); config=self.settings
         async def secure_send(message):

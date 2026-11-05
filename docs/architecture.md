@@ -175,3 +175,67 @@ Frontend academics-state хранит данные только в памяти,
 связаны с account lifecycle; loading/error/clear удаляют старый DOM. academics.js использует
 textContent, карточки, progress, раскрываемые семестры и доступные empty/error-состояния.
 Новые assets перечислены явно в app.py, новых внешних ресурсов и библиотек нет.
+
+
+## V6 — электронные заявки
+
+Новая 0005_requests, SQL 0001–0004 не изменяются. student_requests содержит owner FK
+на student_profiles, faculty_id (снимок при отправке), type/purpose/message,
+status/version/created_at/updated_at, request_key/payload_hash. UNIQUE student/key
+защищает повтор POST; индекс owner/created поддерживает квоты и списки.
+request_history хранит переход, version, actor_id FK users, actor_role, comment,
+UTC created_at; UNIQUE request/version, insert-проверка совпадения текущего статуса,
+запрет UPDATE/DELETE истории. request_staff_scopes — явные пары staff_profile/faculty.
+
+requests/service.py: read_requests/authorized_request ограничивают SQL по server user.id
+либо EXISTS разрешённого faculty scope. Student ID/actor/role из body не принимаются.
+Студент видит только свою заявку; чужой и отсутствующий ID одинаково дают 404.
+Сотрудник получает контекст заявителя (имя/группа) только в деталях доступного обращения,
+без оценок, credentials или общего доступа к профилям. Новых прав вне заявок нет.
+
+create_request/transition_request делают дешёвый read-only preflight session/CSRF,
+затем повторяют live resolve, role/CSRF и проверку владельца/scope под BEGIN IMMEDIATE.
+Текущий статус и история меняются в одной транзакции; ошибка истории откатывает статус.
+Version конфликт даёт 409. TRANSITIONS: submitted→processing→approved|rejected для
+сотрудника; submitted→cancelled для владельца. Терминальные переходы запрещены.
+Начальная отправка тоже фиксируется в истории. Авторы решений определяются сервером.
+Имена автора отображаются из профилей, неизменный actor_id и роль события остаются в БД.
+
+Создание ограничено 5/600s и 20/86400s на владельца, включая отменённые. В одной
+транзакции проверяются owner/key/payload_hash, квота и вставка. Идемпотентный повтор
+не расходует квоту; иной payload с тем же key — 409. Роли/request_key не заменяют авторизацию.
+HTTP тела/DTO ограничены по длине, extra=forbid; SQL параметризован, свободный текст
+выводится textContent/pre-wrap. Ошибки безопасные, ответы no-store.
+
+Новые routes /api/v1/me/requests и /api/v1/staff/requests явно отделены. IdentityGuard
+и общий обработчик validation расширены на staff prefix: exact Origin/Host/transport,
+Fetch Metadata, CSRF duplicates, JSON/body limit/deadline/no-store сохранены.
+CSRF каждой mutation привязан к живой серверной сессии, не только cookie/header equality.
+
+requests-state: один in-flight, технический ключ восстановления в sessionStorage, AbortController/
+epoch/expected identity, пагинация. requests.js: форма студента, карточки/история,
+доступные действия и комментарий сотрудника. Account-state сообщает вид проверки:
+при refresh представление скрывается, несданная форма сохраняется только для того
+же подтверждённого аккаунта; при смене/ошибке/выходе данные и форма очищаются.
+Комментарий сотрудника хранится в памяти отдельно по owner/request, переживает
+suspend/refresh/error/409 и очищается после подтверждённого действия/logout/смены
+пользователя. При terminal conflict доступен только для копирования, без auto retry.
+Assets перечислены явно, зависимости не добавлены. Файлов/печатей/подписей/официальных
+документов, needs_info и редактирования обращений после отправки нет.
+
+
+### AUD-01 / AUD-02 — 5 ноября 2026
+
+request-operation.js хранит только {v,key,type,tag,expiresAt} в sessionStorage вкладки.
+tag=SHA-256(domain + user.id + random key), случайный для каждой операции; сам UUID
+пользователя и стабильный идентификатор аккаунта не записываются. Это техническая
+привязка, не авторизация или секрет сессии. Срок 24 часа. Проверка владельца выполняется
+после server-confirmed identity; чужой маркер удаляется. Перед POST save проверяется
+чтением, недоступное хранилище блокирует отправку. Personal form data и fingerprints
+содержимого не сохраняются. При reload ключ восстанавливается, текст вводится заново.
+Смена типа неподтверждённой операции требует явной новой отправки; изменённый текст
+с тем же ключом проверяет неизменённый backend payload_hash (409 при несовпадении).
+Успех очищает маркер; logout удаляет, pagehide сохраняет только технические метаданные.
+Закрытие/восстановление вкладки — поведение sessionStorage браузера, не гарантия хранения.
+Новые endpoints/миграции/серверная модель идемпотентности не добавлялись; в app.py только
+asset нового ES module. Сервер по-прежнему является источником истины.

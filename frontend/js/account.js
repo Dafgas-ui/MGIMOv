@@ -1,4 +1,5 @@
 import {requestJson} from './api.js';
+import {requestsIdentity} from './requests.js';
 import {academicsIdentity} from './academics.js';
 import {scheduleIdentity} from './schedule.js';
 import {createAccountState} from './account-state.js';
@@ -15,6 +16,7 @@ const controller = createAccountState({request:requestJson,
   publish(value) {
     if (typeof scheduleIdentity === 'function') scheduleIdentity(null);
     if (typeof academicsIdentity === 'function') academicsIdentity(null);
+    if (typeof requestsIdentity === 'function' && value.state!=='ready') requestsIdentity(null,{suspend:(value.state==='loading' && value.operation==='refresh') || value.state==='error',discardOperation:value.operation==='logout'});
     profile.replaceChildren(); accountPanel.hidden = true; loginPanel.hidden = false;
     fields.disabled = value.state === 'loading' || value.state === 'logout-pending';
     get('account-check').disabled = value.state === 'loading';
@@ -25,6 +27,7 @@ const controller = createAccountState({request:requestJson,
     loginPanel.hidden = true; accountPanel.hidden = false;
     if (typeof scheduleIdentity === 'function') scheduleIdentity(value.user);
     if (typeof academicsIdentity === 'function') academicsIdentity(value.user);
+    if (typeof requestsIdentity === 'function') requestsIdentity(value.user);
     get('account-title').textContent = value.user.role === 'student' ? 'Профиль студента' : 'Учётная запись сотрудника';
     const labels = {full_name:'ФИО',faculty:'Факультет',program:'Программа',course:'Курс',study_group:'Группа',position:'Должность'};
     for (const [key,label] of Object.entries(labels)) {

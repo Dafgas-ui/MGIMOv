@@ -78,7 +78,7 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual(self.client.request(method,'/api/v1/me/profile',json={'id':other},headers={'Origin':self.config.origin}).status_code,405)
         self.assertEqual(self.client.get('/api/v1/me/profile',headers={'X-User-Id':other,'X-Role':'staff'}).json()['user']['id'],self.ids['student_a'])
         self.assertEqual(self.client.get('/api/v1/me/profile',headers={'X-Mgimov-User':other}).status_code,403)
-        self.assertEqual(self.client.get('/api/v1/staff/requests').status_code,404)
+        self.assertEqual(self.client.get('/api/v1/staff/requests').status_code,403)
     def test_login_csrf_and_origin_required(self):
         body={'login':'student_a','password':self.credentials['student_a']};csrf=self.bootstrap()
         for headers in ({'Origin':self.config.origin},{'Origin':self.config.origin,'X-CSRF-Token':secrets.token_urlsafe(32)},{'Origin':'https://foreign.invalid','X-CSRF-Token':csrf},{'X-CSRF-Token':csrf}):
@@ -147,7 +147,7 @@ class IdentityTests(unittest.TestCase):
             definitions=root/'v2';definitions.mkdir();shutil.copyfile(ROOT/'backend/migrations/0001_initial.sql',definitions/'0001_initial.sql')
             db=root/'upgrade.sqlite3';update(db,create=True,directory=definitions)
             with connection(Settings(db),write=True) as c:c.execute("INSERT INTO app_metadata VALUES ('preserve','yes')")
-            update(db,backup=root/'before.sqlite3');self.assertEqual(status(db)['applied'],['0001_initial','0002_identity','0003_schedule','0004_academics'])
+            update(db,backup=root/'before.sqlite3');self.assertEqual(status(db)['applied'],['0001_initial','0002_identity','0003_schedule','0004_academics','0005_requests'])
             self.assertEqual(update(db)['pending'],[])
             with connection(Settings(db)) as c:self.assertEqual(c.execute("SELECT value FROM app_metadata WHERE key='preserve'").fetchone()[0],'yes')
         with self.assertRaises(ValueError):seed_demo(self.config,self.credentials)

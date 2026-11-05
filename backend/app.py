@@ -8,12 +8,16 @@ from .migrations.manager import MigrationError
 from .health import Readiness
 from .schedule.routes import install_schedule
 from .academics.routes import install_academics
+from .requests.routes import install_requests
 
 ASSETS = {
+    "/js/request-operation.js": ("js/request-operation.js", "text/javascript"),
     "/": ("index.html", "text/html"),
     "/css/tokens.css": ("css/tokens.css", "text/css"),
     "/css/base.css": ("css/base.css", "text/css"),
     "/js/app.js": ("js/app.js", "text/javascript"),
+    "/js/requests.js": ("js/requests.js", "text/javascript"),
+    "/js/requests-state.js": ("js/requests-state.js", "text/javascript"),
     "/js/academics.js": ("js/academics.js", "text/javascript"),
     "/js/academics-state.js": ("js/academics-state.js", "text/javascript"),
     "/js/schedule.js": ("js/schedule.js", "text/javascript"),
@@ -33,6 +37,7 @@ def create_app(settings: Settings | None = None):
     install_identity(application,settings)
     install_schedule(application,settings)
     install_academics(application,settings)
+    install_requests(application,settings)
     readiness = Readiness(settings)
 
     @application.get("/api/health")

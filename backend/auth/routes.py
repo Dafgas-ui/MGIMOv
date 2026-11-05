@@ -35,7 +35,7 @@ def install_identity(app,settings):
         return JSONResponse({'detail':error.message},status_code=error.status,headers={'Retry-After':'60'} if error.status==429 else None)
     @app.exception_handler(RequestValidationError)
     async def validation_error(request,error):
-        if request.url.path.startswith(('/api/v1/auth/','/api/v1/me/')):
+        if request.url.path.startswith(('/api/v1/auth/','/api/v1/me/','/api/v1/staff/')):
             return JSONResponse({'detail':'Проверьте формат и длину полей.'},status_code=422)
         return await request_validation_exception_handler(request,error)
     @app.exception_handler(sqlite3.Error)
