@@ -56,7 +56,7 @@ export function mountRequests(document){
     return document.cookie.split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1) || '';
   },publish(value){
     get('requests-content').replaceChildren();root.hidden=['hidden','suspended'].includes(value.state);
-    if(value.state==='suspended')return;
+    if(value.state==='suspended'){fields.disabled=true;return;}
     if(value.state==='hidden'){form.reset();form.hidden=true;return;}
     get('request-recovery').hidden=!value.recovery;
     get('request-recovery-text').textContent=value.recovery?.lost?'Не удалось восстановить прежнюю отправку. Сначала проверьте список обращений.':value.recovery?`Осталась неподтверждённая отправка: ${requestTypes[value.recovery.type]}. Проверьте список или повторите те же поля. Изменённый текст проверит сервер.`:'';

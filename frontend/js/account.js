@@ -16,10 +16,10 @@ const controller = createAccountState({request:requestJson,
   publish(value) {
     if (typeof scheduleIdentity === 'function') scheduleIdentity(null);
     if (typeof academicsIdentity === 'function') academicsIdentity(null);
-    if (typeof requestsIdentity === 'function' && value.state!=='ready') requestsIdentity(null,{suspend:(value.state==='loading' && value.operation==='refresh') || value.state==='error',discardOperation:value.operation==='logout'});
+    if (typeof requestsIdentity === 'function' && value.state!=='ready') requestsIdentity(null,{suspend:value.state==='suspended' || (value.state==='loading' && value.operation==='refresh') || (value.state==='error' && !value.identityInvalidated),discardOperation:value.operation==='logout'});
     profile.replaceChildren(); accountPanel.hidden = true; loginPanel.hidden = false;
-    fields.disabled = value.state === 'loading' || value.state === 'logout-pending';
-    get('account-check').disabled = value.state === 'loading';
+    fields.disabled = ['loading','logout-pending','suspended'].includes(value.state);
+    get('account-check').disabled = ['loading','suspended'].includes(value.state);
     get('logout-retry').hidden = value.state !== 'logout-pending';
     message.textContent = value.message;
     if (value.state !== 'ready') return;
@@ -48,11 +48,11 @@ get('logout-retry').addEventListener('click',()=>controller.logout());
 get('account-check').addEventListener('click',()=>controller.refresh());
 if (channel) channel.onmessage = () => controller.clear('Состояние входа изменилось в другой вкладке. Проверьте вход.');
 document.addEventListener('visibilitychange',()=> {
-  if (document.visibilityState === 'hidden') controller.clear('Для просмотра профиля повторно проверьте вход.');
+  if (document.visibilityState === 'hidden') {get('password').value='';controller.suspend();}
   else controller.refresh();
 });
 addEventListener('pagehide',()=>{get('password').value='';controller.clear();});
-addEventListener('pageshow',event=>{if(event.persisted)controller.refresh();});
-addEventListener('online',()=>controller.refresh());
+addEventListener('pageshow',event=>{if(event.persisted && document.visibilityState==='visible')controller.refresh();});
+addEventListener('online',()=>{if(document.visibilityState==='visible')controller.refresh();});
 setInterval(()=>{if(document.visibilityState === 'visible')controller.refresh({background:true});},60000);
-controller.refresh();
+if(document.visibilityState==='visible')controller.refresh();else controller.suspend();

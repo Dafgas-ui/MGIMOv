@@ -97,3 +97,13 @@ staff drafts и технический retry marker в sessionStorage, без с
 и оборванный ответ + reload/retry. [Доказательства](test-results.md#aud-01--aud-02--5-ноября-2026).
 Новых миграций/backend requests logic/библиотек/субагентов/V7/SMTP/deploy нет.
 Повторная независимая проверка не присваивается Sol; public NOT VERIFIED.
+
+
+## UX-01 — 5 ноября 2026, Sol
+
+Исправлена потеря staff/student drafts из-за visibilitychange→clear. Добавлен account
+suspend с сохранением ожидаемой identity, requests identityReady gate и очистка при
+серверном отказе доступа. Backend/CSRF/scopes/storage не менялись. 9 новых DOM/lifecycle
+тестов, повторно после выключения ноутбука полный 90 Python/45 JS. Browser retry не
+подключился: реальный tab switch не объявлен выполненным. [Доказательства](test-results.md#ux-01--5-ноября-2026).
+Отдельный локальный commit по разрешению пользователя; без push/V7/рабочей БД.

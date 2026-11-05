@@ -448,3 +448,55 @@ reload и не сохраняется на диск. Технический mark
 Это исправления Sol; независимая повторная проверка AUD-01/02 не выполнена. Нагрузка/DoS
 не запускались. Полная accessibility, TLS/proxy/public perimeter, восстановление backups
 и эксплуатационные настройки не подтверждены; public deploy остаётся NOT VERIFIED.
+
+
+## UX-01 — 5 ноября 2026
+
+Sol, база `334a86d2f8dae9669ad8f84c388afe57ff211e5c` + UX diff. Источник P1 UX-находки —
+пользователь/Astra: visibilitychange(hidden) вызывал account.clear, который через
+requestsIdentity(null) стирал owner-bound Map и reset студенческой формы.
+Теперь suspend сохраняет текст в RAM, скрывает UI, блокирует действия; visible снова
+проверяет identity/profile и доступ к выбранному обращению. Logout/pagehide/невалидная
+identity очищают, server scope refusal удаляет draft выбранной заявки.
+
+### Выполненные проверки
+
+- `node --test tests/visibility.test.js`: **9/9, exit 0**. Реальные account.js handlers
+  исполняются в VM, реальные mountRequests/state/render — с минимальным DOM, backend/fetch
+  подменён. Это интеграция frontend-модулей с fake DOM, не настоящий браузер.
+- Скрытие/возврат того же сотрудника: текст сохранился, пока ответ identity задержан —
+  профиль/заявки скрыты, textarea отсутствует, student fields disabled. До и после
+  восстановления administrative POST=0. Повторный refresh, hidden посреди refresh,
+  late reply и online(hidden) не открывают UI.
+- Expired 401, changed user 403 и role change очищают staff draft; faculty scope 404
+  не восстанавливает поле и стирает draft выбранного обращения. Сетевая 503 сохраняет
+  текст скрытым до успешной проверки. Неуспешный logout с дальнейшим hide/show остаётся
+  закрытым, старый draft не появляется.
+- Студенческие purpose/message сохраняются при hide/show; pagehide и logout очищают.
+  Редактирования профиля нет (dl read-only); другие учебные модули только читают данные.
+  Пароль при скрытии очищается. Существующие AUD-01/error/409/success и AUD-02 reload/
+  nonce/quotas/account binding проверки сохранены.
+- После сообщения пользователя о выключении ноутбука повторно выполнен полный набор:
+  `.venv/Scripts/python.exe -B -m unittest discover -s tests -q` — **90/90, exit 0**,
+  без пропусков, временные SQLite + реальные HTTP в существующих тестах;
+  `node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/schedule.test.js tests/academics.test.js tests/requests.test.js tests/visibility.test.js`
+  — **45/45, exit 0**, без пропусков (36 прежних + 9 UX).
+- Python/JS синтаксис, Git diff/check, ссылки, выбранные secret patterns и protected
+  hashes проверены при завершении. Зависимости не менялись, Starlette/httpx warning остаётся.
+
+### Реальный браузер и ограничения
+
+До выключения был открыт только экран входа временного стенда — это не успешный
+сценарий смены вкладок. После выключения попытки открытия/подключения IAB закончились
+тайм-аутом и ошибкой инициализации браузерного сервиса. Поэтому **реальный браузерный
+тест UX-01 не проводился до результата**. Требуется ручной/независимый прогон, включая
+настоящий tab switch в целевых браузерах/мобильную выгрузку страницы. Прежние браузерные
+результаты AUD/V6 относятся к прежним изменениям и не присваиваются UX-01.
+
+Pagehide, перезагрузка, закрытие вкладки, выгрузка браузером или выключение устройства
+по-прежнему могут терять текст: новой системы автосохранения нет. Технический marker
+AUD-02 сохраняет только retry metadata по прежним правилам. Независимая проверка UX-01
+не выполнялась. Public deploy/TLS/proxy/backup recovery/полная доступность — NOT VERIFIED.
+
+Временные UX-стенды остановлены: порты 8048/8049 без listener; демопользователи
+отключены, сессии отозваны. Рабочая база не менялась.

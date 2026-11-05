@@ -99,3 +99,14 @@ V4/V5/V6-ACCEPT выше. Точная ревизия/дата отчёта не
 | AUD-RECHECK | Независимая проверка исправлений | planned | По отдельному запросу пользователя, без присвоения прежнего PASS новому diff |
 
 V7/email-активация не начаты. PUBLIC-GATE сохраняется, нагрузка/DoS не выполнялись.
+
+
+## UX-01 — сохранение работы при переключении вкладок
+
+| ID | Приоритет | Состояние | Результат / граница |
+|---|---|---|---|
+| UX-01 | P1 UX | review | Sol: suspend/clear, same identity/scope restore, student form; 90 Python/45 JS |
+| UX-01-BROWSER | P1 UX | planned | Реальный tab switch после восстановления браузерного подключения; IAB повторно не подключился после выключения ноутбука |
+| UX-01-COMMIT | P1 | done | Разрешённая локальная фиксация «Fix UX-01 drafts across tab visibility changes», без push |
+
+Независимая повторная проверка UX-01/AUD не заявляется. V7 не начат, public NOT VERIFIED.

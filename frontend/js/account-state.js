@@ -1,16 +1,24 @@
 // Identity-bound, memory-only state. Late responses never restore a cleared profile.
 export function createAccountState({request, readCsrf, publish, signalChange = () => {}, timeoutMs = 10000}) {
-  let generation = 0, active = null, busy = false, owner = null, logoutOwner = null;
+  let generation = 0, active = null, busy = false, owner = null, logoutOwner = null, checkingOwner = null;
   const emit = (state, message, extra = {}) => publish({state,message,...extra});
   function clear(message = 'Проверьте вход в систему.') {
-    generation++; active?.abort(); active = null; busy = false; owner = null;
+    generation++; active?.abort(); active = null; busy = false; owner = null; checkingOwner = null;
     emit('anonymous',message);
+  }
+  function suspend() {
+    const expected=owner || checkingOwner;
+    generation++;active?.abort();active=null;busy=false;checkingOwner=null;
+    if(logoutOwner){owner=null;emit('logout-pending','Выход не подтверждён. Повторите выход; личные данные скрыты.');return;}
+    owner=expected;
+    emit('suspended','Вкладка скрыта. При возвращении проверим вход.');
   }
   async function perform(kind, credentials, background = false) {
     // An anonymous login form has no private session to poll; preserve an unfinished draft.
     if (kind === 'refresh' && background && !owner) return false;
     if (busy) return false;
     const expected = owner || logoutOwner;
+    checkingOwner=expected;
     if (kind === 'logout') logoutOwner = expected;
     const id = ++generation;
     active?.abort(); const abort = new AbortController(); active = abort; busy = true; owner = null;
@@ -58,14 +66,14 @@ export function createAccountState({request, readCsrf, publish, signalChange = (
           : error.status === 403 ? 'Проверка безопасности не пройдена. Повторите проверку входа.'
           : error.status === 422 ? 'Проверьте логин и пароль.'
           : 'Сервер недоступен или ответ не получен. Повторите проверку входа.';
-        emit('error',message);
+        emit('error',message,{identityInvalidated:error.status===403});
       }
       return false;
     } finally {
       clearTimeout(timer);
-      if (current()) { busy = false; active = null; }
+      if (current()) { busy = false; active = null; checkingOwner = null; }
     }
   }
   return { login:(login,password)=>perform('login',{login,password}), refresh:({background = false} = {})=>perform('refresh',undefined,background),
-    logout:()=>perform('logout'), clear, isBusy:()=>busy };
+    logout:()=>perform('logout'), clear, suspend, isBusy:()=>busy };
 }

@@ -348,3 +348,28 @@ Manual/minute refresh staff draft, отдельные заявки/успех/lo
 Повторный независимый аудит изменений не выполнялся. Public deploy NOT VERIFIED.
 Закрытие/восстановление вкладок и очистка sessionStorage зависят от браузера;
 полная accessibility/другие браузеры/TLS/proxy/backup recovery ещё не проверены.
+
+
+## UX-01 — передача исправления Sol
+
+5 ноября 2026. По заданию пользователя исправлена дополнительная находка Astra P1 UX:
+обычная смена вкладок вызывала account.clear и теряла комментарии/студенческую форму.
+База `334a86d2f8dae9669ad8f84c388afe57ff211e5c`, исходное рабочее дерево чистое.
+Сессии/права/CSRF на сервере не менялись. Hide — suspend с отменой запросов/epoch,
+закрытым UI и заблокированными действиями. Visible — GET проверки identity/profile,
+затем заявки с live scope. Сохранение только при том же пользователе/роли/доступе;
+401/403 очищают draft, staff 404 удаляет выбранный. Неуспешный logout не восстанавливает
+старый аккаунт. Pagehide/reload всё ещё очищают текст. Новых browser storage нет.
+
+Sol: 9 целевых DOM/lifecycle тестов и полный 90 Python/45 JS, exit 0; AUD-01/AUD-02
+и реальные HTTP V2–V6 в полном наборе пройдены. В тестах выполняется настоящий account.js
+с его visibilitychange/online/pagehide и настоящий mountRequests/state/render;
+auth/network/scope подменены. Смена пользователя/роли, expiry, scope revoke, сеть,
+повторный refresh, late replies, logout-pending и отсутствие administrative POST проверены.
+
+Пользователь сообщил о выключении ноутбука и попросил повторить; Git/тесты проверены
+повторно. Browser IAB не подключился (timeout/инициализация), поэтому реальный
+браузерный сценарий UX-01 **не выполнен**, не смешивать с прежним browser AUD/V6.
+Нужны отдельная независимая приёмка и реальный tab switch. Public NOT VERIFIED.
+Локальный commit «Fix UX-01 drafts across tab visibility changes» по разрешению
+пользователя; точный hash — Git/финальный отчёт. Без push/V7/записи working SQLite.

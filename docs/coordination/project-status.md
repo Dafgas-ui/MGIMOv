@@ -98,8 +98,9 @@ SEC-04: [требования периметра](../deployment-security.md) п�
 ## Git и источники
 
 База проверки: V5 `31a8ed8f57e80577caca9e8fd91ee3465092f065` + рабочее дерево V6/AUD.
-Фиксация по заданию: отдельный локальный commit «Complete V6 and fix AUD-01 AUD-02».
-Точный актуальный hash после фиксации — `git rev-parse HEAD`; проверки ниже выполнены до commit.
+V6/AUD зафиксирован `334a86d2f8dae9669ad8f84c388afe57ff211e5c`.
+UX-01 проверяется поверх него и фиксируется отдельным локальным commit
+«Fix UX-01 drafts across tab visibility changes»; актуальный hash — `git rev-parse HEAD`.
 Рабочая SQLite, SQL 0001–0004, AGENTS, Skills и конфигурации субагентов сохранены.
 Новых зависимостей, push и публикации нет.
 [Архитектура](../architecture.md), [решения](../decisions.md),
@@ -159,3 +160,21 @@ Sol: **90 Python/36 JS, exit 0**, 13 целевых JS, синтаксис, ре
 настоящий минутный refresh сохраняют staff draft; другое обращение/успех/logout проверены.
 Повторная независимая проверка исправлений не заявляется. Public deploy NOT VERIFIED.
 [Доказательства](../test-results.md#aud-01--aud-02--5-ноября-2026).
+
+
+## UX-01 — 5 ноября 2026, Sol
+
+Источник — пользователь: дополнительная UX-находка Astra, P1 для конкурсного UX.
+Причина: visibilitychange(hidden) вызывал account.clear, затем requests.clear,
+стирая staff Map и несданную форму студента. Исправлено разделением suspend/clear:
+скрытые данные/заблокированные действия до server-confirmed identity и проверки
+выбранной заявки; same owner восстанавливает, expired/changed identity/role/scope — очищает.
+Сохранены AUD-01/02, network/409 retain, strict logout, no automatic POST.
+
+После выключения ноутбука пользователь попросил повторить. Сохранённые изменения
+проверены заново: **90 Python/45 JS, exit 0**, включая 9 новых DOM/lifecycle тестов.
+Реальный browser-switch UX-01 не подтверждён: повторное подключение IAB после
+перезапуска завершилось тайм-аутом/ошибкой инициализации. VM с настоящими обработчиками
+не объявляется браузером. Backend/рабочая SQLite/Skills/AGENTS не изменялись.
+Нужна независимая проверка и реальный browser-switch; публичное размещение NOT VERIFIED.
+[Доказательства](../test-results.md#ux-01--5-ноября-2026).
