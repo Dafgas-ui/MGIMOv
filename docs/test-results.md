@@ -500,3 +500,27 @@ AUD-02 сохраняет только retry metadata по прежним пра
 
 Временные UX-стенды остановлены: порты 8048/8049 без listener; демопользователи
 отключены, сессии отозваны. Рабочая база не менялась.
+## LUNA-UI-01 — этап 1 — 5 ноября 2026
+
+Исполнитель: Luna. Исходный HEAD `41ccc0dcac30565897d0c5455f7b003e84fff346`;
+проверки выполнены на нём с текущим рабочим diff до коммита. Design Lab G утверждён
+пользователем; использованы `HANDOFF-G.md`, `REPORT.md` (раздел G), `hybrid.js`,
+`hybrid.css`, `theme.js`, `tokens.css`, `verify-hybrid.cjs` и актуальные HTML-оболочки.
+G — новая передача после исходного A–F scope; отчёт лаборатории отдельно фиксирует
+864 браузерных представления, 14 тестов выбора занятия и 8 220 проверок цвета.
+Эти цифры относятся только к Design Lab, не к интеграции MGIMOv.
+
+Проверки MGIMOv:
+
+- `node --test tests/dates.test.js tests/api.test.js tests/account-state.test.js tests/appearance.test.js tests/schedule.test.js tests/academics.test.js tests/requests.test.js tests/visibility.test.js` — **53/53, exit 0**.
+- `.venv\Scripts\python.exe -B -m unittest discover -s tests -q` — **90/90, exit 0**. Разрешён loopback для Starlette TestClient; все test DB — временные фикстуры, рабочая SQLite не использовалась. Есть предупреждение о deprecated связке Starlette TestClient/httpx.
+- `node --check frontend/js/account.js` и `node --check frontend/js/account-state.js` — exit 0.
+- Python HTMLParser для `frontend/index.html` — OK.
+- Контраст: JS-регрессии проверяют все 6 палитр в Light/Dark и custom black/white/yellow/gray; минимальный контраст ссылки и текста кнопки — 4.5:1.
+- JS-регрессии также проверяют reload/account separation/reset, System OS switch, повторную identity-refresh без сброса темы, авторизованную сессию, существующий server logout, отсутствие API-запроса при смене оформления и сохранность незавершённого staff-комментария.
+
+Ограничения: реальная браузерная проверка этого diff не выполнена. CUA прервался до загрузки стенда; DOM-тесты не считаются браузерной проверкой. Мобильное отображение, реальный `prefers-reduced-motion`, клавиатура и скринридер здесь не принимались. AUD-02 и UX-01 остаются без новой независимой браузерной пере-приёмки. Astra ещё не вернула независимый результат по этому diff.
+
+Из Design Lab перенесена только система оформления и настройки; G-оболочка,
+поисковая строка и блок занятия в этапе 1 не интегрировались. API, backend, SQLite,
+авторизация/CSRF, storage черновиков и Design Lab не менялись. Этап 2 не начат.

@@ -2,11 +2,49 @@ import {requestJson} from './api.js';
 import {requestsIdentity} from './requests.js';
 import {academicsIdentity} from './academics.js';
 import {scheduleIdentity} from './schedule.js';
-import {createAccountState} from './account-state.js';
+import {createAccountState,createAppearanceState} from './account-state.js';
 const get = id => document.getElementById(id);
 const form = get('login-form'), fields = get('login-fields'), message = get('account-message');
 const profile = get('profile-details'), loginPanel = get('login-panel'), accountPanel = get('account-panel');
 const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('mgimov-identity-v1') : null;
+let appearanceStorage=null;
+try { appearanceStorage=globalThis.localStorage; } catch { /* Appearance remains usable in memory when browser storage is blocked. */ }
+const appearanceTheme=get('appearance-theme'), appearancePalette=get('appearance-palette'), appearanceCustom=get('appearance-custom');
+const appearance = createAppearanceState({
+  storage:appearanceStorage,
+  cryptoObject:globalThis.crypto,
+  prefersDark:()=>typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: dark)').matches,
+  apply(value) {
+    const root=document.documentElement;
+    root.dataset.theme=value.resolvedTheme;
+    root.dataset.themeMode=value.settings.theme;
+    root.dataset.palette=value.settings.palette;
+    root.style.setProperty('--accent',value.colors.accent);
+    root.style.setProperty('--on-accent',value.colors.onAccent);
+    root.style.setProperty('--accent-soft',value.colors.accentSoft);
+    root.style.setProperty('--focus',value.colors.focus);
+    const meta=document.querySelector('meta[name="theme-color"]');
+    if(meta)meta.content=value.resolvedTheme==='dark'?'#171e1a':'#f7f7f2';
+  },
+  publish(value) {
+    appearanceTheme.value=value.settings.theme;
+    appearancePalette.value=value.settings.palette;
+    appearanceCustom.value=value.settings.custom;
+    const color=value.colors;
+    get('appearance-contrast').textContent=`Акцент ${color.accent.toUpperCase()} · текст ${color.textRatio.toFixed(2)}:1 · ссылки ${color.linkRatio.toFixed(2)}:1.${color.adjusted?' Цвет скорректирован для контраста.':''}`;
+    const labels={anonymous:'Настройки применяются в этой вкладке. Войдите, чтобы сохранить их отдельно для аккаунта.',loading:'Загружаем настройки этого аккаунта…',ready:'Настройки сохраняются отдельно для этого аккаунта на устройстве.',saved:'Настройки сохранены для этого аккаунта на устройстве.',unavailable:'Локальное сохранение недоступно. Настройки останутся до закрытия страницы.'};
+    get('appearance-storage-status').textContent=labels[value.persistence]||labels.unavailable;
+  }
+});
+appearanceTheme.addEventListener('change',()=>appearance.update({theme:appearanceTheme.value}));
+appearancePalette.addEventListener('change',()=>appearance.update({palette:appearancePalette.value,custom:appearanceCustom.value}));
+appearanceCustom.addEventListener('input',()=>appearance.update({palette:'custom',custom:appearanceCustom.value}));
+get('appearance-reset').addEventListener('click',()=>appearance.reset());
+if(typeof matchMedia==='function') {
+  const systemTheme=matchMedia('(prefers-color-scheme: dark)');
+  systemTheme.addEventListener?.('change',()=>appearance.systemThemeChanged());
+}
+appearance.setUser(null);
 const controller = createAccountState({request:requestJson,
   readCsrf() {
     const name = location.protocol === 'https:' ? '__Host-mgimov_csrf' : 'mgimov_csrf';
@@ -14,15 +52,22 @@ const controller = createAccountState({request:requestJson,
   },
   signalChange:()=>channel?.postMessage('identity-changing'),
   publish(value) {
+    if(value.state==='anonymous')appearance.setUser(null);
     if (typeof scheduleIdentity === 'function') scheduleIdentity(null);
     if (typeof academicsIdentity === 'function') academicsIdentity(null);
     if (typeof requestsIdentity === 'function' && value.state!=='ready') requestsIdentity(null,{suspend:value.state==='suspended' || (value.state==='loading' && value.operation==='refresh') || (value.state==='error' && !value.identityInvalidated),discardOperation:value.operation==='logout'});
     profile.replaceChildren(); accountPanel.hidden = true; loginPanel.hidden = false;
     fields.disabled = ['loading','logout-pending','suspended'].includes(value.state);
     get('account-check').disabled = ['loading','suspended'].includes(value.state);
+    get('logout').hidden = value.state !== 'ready';
     get('logout-retry').hidden = value.state !== 'logout-pending';
+    get('settings-account-message').textContent=value.state==='ready'
+      ? `Вход выполнен · ${value.user.role==='student'?'студент':'сотрудник'}. Выход завершает текущую серверную сессию.`
+      : value.state==='logout-pending'?value.message
+      : value.state==='loading'?'Проверяем состояние аккаунта…':'Войдите, чтобы увидеть состояние аккаунта.';
     message.textContent = value.message;
     if (value.state !== 'ready') return;
+    appearance.setUser(value.user.id);
     get('password').value = '';
     loginPanel.hidden = true; accountPanel.hidden = false;
     if (typeof scheduleIdentity === 'function') scheduleIdentity(value.user);

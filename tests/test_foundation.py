@@ -164,7 +164,12 @@ class FoundationTests(unittest.TestCase):
             self.assertNotIn("AI-Student-Dashboard", text)
         for path in (ROOT / "frontend/js").rglob("*.js"):
             text = path.read_text(encoding="utf-8")
-            self.assertNotIn("localStorage", text)
+            if path.name == "account.js":
+                # The only approved localStorage access is account-bound appearance preferences.
+                self.assertEqual(text.count("globalThis.localStorage"), 1)
+                self.assertNotIn("localStorage", text.replace("globalThis.localStorage", ""))
+            else:
+                self.assertNotIn("localStorage", text)
             self.assertNotIn("127.0.0.1", text)
 
     def test_real_uvicorn_start_health_and_page(self):

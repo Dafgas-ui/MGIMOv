@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7f7f2">
   <title>Цифровой деканат — конкурсный концепт</title>
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/base.css">
@@ -17,6 +18,7 @@
     <h1>Цифровой деканат будущего</h1>
     <p class="notice">Конкурсный концепт. Неофициальный сервис. Все данные вымышлены</p>
     <p class="muted">Личный кабинет, расписание и успеваемость в одном месте.</p>
+    <nav class="page-navigation" aria-label="Разделы страницы"><a href="#settings-section">Настройки</a></nav>
   </header>
   <div class="grid">
     <section class="card" aria-labelledby="connection-title">
@@ -42,14 +44,49 @@
       <div id="account-panel" hidden>
         <h3 id="account-title">Профиль</h3>
         <dl id="profile-details"></dl>
-        <button id="logout" type="button">Выйти</button>
-        <p><a href="#requests-section">Перейти к обращениям</a></p>
+        <p><a href="#settings-section">Открыть настройки аккаунта</a></p>
       </div>
-      <button id="logout-retry" type="button" hidden>Повторить выход</button>
       <button id="account-check" type="button">Проверить вход</button>
       <p class="muted">Уведомления — в разработке.</p>
     </section>
   </div>
+  <section id="settings-section" class="card schedule-section settings-section" aria-labelledby="settings-title">
+    <h2 id="settings-title">Настройки</h2>
+    <p class="muted">Оформление применяется сразу. Для каждого вошедшего аккаунта настройки сохраняются отдельно на этом устройстве.</p>
+    <div class="settings-grid">
+      <section aria-labelledby="appearance-title">
+        <h3 id="appearance-title">Внешний вид</h3>
+        <label for="appearance-theme">Тема</label>
+        <select id="appearance-theme">
+          <option value="system">Как в системе</option>
+          <option value="light">Светлая</option>
+          <option value="dark">Тёмная</option>
+        </select>
+        <label for="appearance-palette">Акцентный цвет</label>
+        <select id="appearance-palette">
+          <option value="emerald">Emerald</option>
+          <option value="ocean">Ocean</option>
+          <option value="bordeaux">Bordeaux</option>
+          <option value="indigo">Indigo</option>
+          <option value="terracotta">Terracotta</option>
+          <option value="slate">Slate</option>
+          <option value="custom">Свой цвет</option>
+        </select>
+        <label for="appearance-custom">Свой акцентный цвет</label>
+        <input id="appearance-custom" type="color" value="#245c45" aria-describedby="appearance-custom-help">
+        <p id="appearance-custom-help" class="muted">Для применения выберите «Свой цвет» в списке.</p>
+        <p id="appearance-contrast" class="muted" role="status" aria-live="polite"></p>
+        <p id="appearance-storage-status" class="muted" role="status" aria-live="polite"></p>
+        <button id="appearance-reset" type="button">Сбросить оформление</button>
+      </section>
+      <section id="settings-account" aria-labelledby="settings-account-title">
+        <h3 id="settings-account-title">Аккаунт</h3>
+        <p id="settings-account-message" class="muted" role="status" aria-live="polite">Войдите, чтобы увидеть состояние аккаунта.</p>
+        <button id="logout" type="button" hidden>Выйти из аккаунта</button>
+        <button id="logout-retry" type="button" hidden>Повторить выход</button>
+      </section>
+    </div>
+  </section>
   <section id="schedule-section" class="card schedule-section" aria-labelledby="schedule-title" hidden>
     <h2 id="schedule-title">Расписание</h2>
     <p id="schedule-status" role="status" aria-live="polite"></p>

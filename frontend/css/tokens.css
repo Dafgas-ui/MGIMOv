@@ -1,2 +1,71 @@
-/* Adapted from AI Student Dashboard/style.css. */
-:root { color-scheme: dark; --background: #101217; --card: #191c24; --border: #2b2f3b; --text: #fafbff; --muted: #a2a8b9; --purple: #b4a0ff; --mint: #8bdac1; }
+:root {
+  color-scheme: light dark;
+  --background: #f7f7f2;
+  --surface: #fff;
+  --card: var(--surface);
+  --soft: #edf0e9;
+  --border: #ccd3c9;
+  --text: #202a24;
+  --muted: #5c685e;
+  --accent: #245c45;
+  --on-accent: #fff;
+  --accent-soft: #e5eee4;
+  --focus: #286bba;
+  --purple: var(--accent);
+  --mint: var(--accent);
+  --success: #285f39;
+  --warning: #795413;
+  --danger: #a1342c;
+  --radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --background: #171e1a;
+    --surface: #1e2721;
+    --soft: #26332a;
+    --border: #465247;
+    --text: #eef0e7;
+    --muted: #b1bcae;
+    --accent: #b2cfa4;
+    --on-accent: #172319;
+    --accent-soft: #2e4131;
+    --focus: #9bc6ff;
+    --success: #b0d3a6;
+    --warning: #e6c58a;
+    --danger: #ffb4a7;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #171e1a;
+  --surface: #1e2721;
+  --soft: #26332a;
+  --border: #465247;
+  --text: #eef0e7;
+  --muted: #b1bcae;
+  --success: #b0d3a6;
+  --warning: #e6c58a;
+  --danger: #ffb4a7;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: #f7f7f2;
+  --surface: #fff;
+  --soft: #edf0e9;
+  --border: #ccd3c9;
+  --text: #202a24;
+  --muted: #5c685e;
+  --success: #285f39;
+  --warning: #795413;
+  --danger: #a1342c;
+}
+
+/* Keep existing system theme responsive to OS changes until a user selects a fixed theme. */
+:root[data-theme-mode="system"] { color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme-mode="system"] { color-scheme: dark; }
+}

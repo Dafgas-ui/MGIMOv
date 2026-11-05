@@ -107,3 +107,17 @@ suspend с сохранением ожидаемой identity, requests identity
 тестов, повторно после выключения ноутбука полный 90 Python/45 JS. Browser retry не
 подключился: реальный tab switch не объявлен выполненным. [Доказательства](test-results.md#ux-01--5-ноября-2026).
 Отдельный локальный commit по разрешению пользователя; без push/V7/рабочей БД.
+## LUNA-UI-01, этап 1 — 5 ноября 2026, Luna
+
+Пользователь утвердил Design Lab G Structured Contextual и HANDOFF-G. В основном
+приложении добавлены семантические токены Light/Dark/System, шесть стандартных
+палитр, custom-акцент с коррекцией контраста и раздел настроек. Предпочтения
+сохраняются отдельно для каждого вошедшего аккаунта как только version/theme/palette/
+custom; key namespace — SHA-256 от account ID. Raw ID, сессии/CSRF и учебные/заявочные
+данные не сохраняются. Appearance update не вызывает API и не перестраивает DOM.
+Выход оставлен существующему auth controller/server logout.
+
+Полные проверки: 53 JS/53 и 90 Python/90, exit 0; HTML parse и JS syntax прошли.
+Реальный browser QA не выполнен. Backend/API/schema/рабочая SQLite/Design Lab не
+менялись. Оболочка G и поиск с блоком текущего занятия отложены на следующие этапы.
+Подготовлен независимый handoff Astra; результат ревью не получен. Без push.

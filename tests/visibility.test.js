@@ -8,7 +8,7 @@ import {mountRequests} from '../frontend/js/requests.js';
 import {requestJson} from '../frontend/js/api.js';
 const tick=()=>new Promise(r=>setTimeout(r,0));
 async function fixture(t,role='staff'){
- const nodes=new Map(),docEvents={},windowEvents={},timers=[],calls=[];
+ const nodes=new Map(),docEvents={},windowEvents={},timers=[],calls=[],appearanceUsers=[];
  let user={id:'owner-A',role},failure=0,scope=true,hold=null;
  function element(tag='div'){
   return {tagName:tag,children:[],value:'',hidden:false,disabled:false,textContent:'',handlers:{},
@@ -43,14 +43,33 @@ async function fixture(t,role='staff'){
  function requestsIdentity(value,{suspend=false,discardOperation=false}={}){if(value)return requests.setUser(value);if(suspend)requests.suspend();else requests.clear({discardOperation});}
  const source=readFileSync('frontend/js/account.js','utf8').replace(/^import .*;$/gm,'');
  runInNewContext(source,{document,location:{protocol:'http:'},requestJson,createAccountState,requestsIdentity,
+  createAppearanceState:()=>({setUser(id){appearanceUsers.push(id);},update(){},reset(){},systemThemeChanged(){}}),
   addEventListener(name,fn){windowEvents[name]=fn;},setInterval:fn=>timers.push(fn)});
  await tick();await tick();
- return {document,requests,calls,item,nodes,docEvents,windowEvents,timers,
+ return {document,requests,calls,item,nodes,docEvents,windowEvents,timers,appearanceUsers,
   get:id=>document.getElementById(id),fail:n=>failure=n,user:v=>user=v,scope:v=>scope=v,
   hold(p){hold=p;},async hide(){document.visibilityState='hidden';docEvents.visibilitychange();await tick();},
   async show(){document.visibilityState='visible';docEvents.visibilitychange();await tick();await tick();},
   async open(){await requests.open(item.id);},draft(text){const field=document.getElementById('request-decision-comment');field.value=text;field.handlers.input();}};
 }
+
+test('appearance settings bind to the confirmed account and clear on server logout',async t=>{
+ const f=await fixture(t,'student');
+ assert.ok(f.appearanceUsers.includes('owner-A'));
+ f.get('logout').handlers.click();await tick();await tick();
+ assert.equal(f.appearanceUsers.at(-1),null);
+ assert.ok(f.calls.some(call=>call.path.endsWith('/auth/logout')));
+});
+
+test('appearance controls do not resubmit or clear an unfinished staff comment',async t=>{
+ const f=await fixture(t);await f.open();f.draft('Unsent staff comment');
+ const before=f.calls.length;
+ f.get('appearance-theme').value='dark';f.get('appearance-theme').handlers.change();
+ f.get('appearance-palette').value='ocean';f.get('appearance-palette').handlers.change();
+ f.get('appearance-custom').value='#aabbcc';f.get('appearance-custom').handlers.input();
+ assert.equal(f.get('request-decision-comment').value,'Unsent staff comment');
+ assert.equal(f.calls.length,before);
+});
 
 test('UX-01 real hide/show handlers retain staff text only after identity and scope checks',async t=>{
  const f=await fixture(t);await f.open();f.draft('Keep staff draft');

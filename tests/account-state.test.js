@@ -81,7 +81,9 @@ test('actual account DOM adapter preserves an unfinished password across poll an
   throw Object.assign(new Error(),{status:401});
  };
  const source=readFileSync('frontend/js/account.js','utf8').replace(/^import .*;$/gm,'');
- runInNewContext(source,{document,requestJson,createAccountState,location:{protocol:'http:'},addEventListener(){},setInterval:fn=>timers.push(fn)});
+ runInNewContext(source,{document,requestJson,createAccountState,
+  createAppearanceState:()=>({setUser(){},update(){},reset(){},systemThemeChanged(){}}),
+  location:{protocol:'http:'},addEventListener(){},setInterval:fn=>timers.push(fn)});
  await new Promise(r=>setTimeout(r,0));
  get('login').value='student_a';get('password').value='synthetic-draft';
  timers[0]();await new Promise(r=>setTimeout(r,0));assert.equal(get('password').value,'synthetic-draft');assert.equal(get('login-fields').disabled,false);
