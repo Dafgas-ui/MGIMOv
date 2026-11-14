@@ -287,3 +287,74 @@ Logout и pagehide при уходе/перезагрузке страницы �
 поля. Закрытие вкладки, перезагрузка и выключение устройства не сохраняют текст.
 Техническое восстановление ключа отправки AUD-02 остаётся прежним, без сохранения формы.
 Пароль входа при скрытии очищается. Редактирования профиля в текущем интерфейсе нет.
+
+
+## Локальный запуск Windows 11 на порту 8030
+
+Проверено 5 ноября 2026, HEAD 41ccc0d. Python 3.13.1 и зависимости уже доступны
+в .venv; устанавливать их повторно не нужно. Порты 8001/8030 на момент проверки свободны.
+Порт 8000 относится к AI Student Dashboard, 8027 — Design Lab: не использовать и не останавливать.
+Обычные defaults остаются data/deanery.sqlite3 + origin 8010; рабочая база содержит
+только 0001_initial и не подходит для V6. Она не мигрировалась.
+
+Для первого самостоятельного запуска уже создана отдельная
+`.tmp/demo-local-8030.sqlite3`: все 5 миграций, **пока без аккаунтов**.
+Откройте PowerShell в `C:\Projects\MGIMOv` и один раз выполните:
+
+```powershell
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_demo --db .tmp/demo-local-8030.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_schedule --db .tmp/demo-local-8030.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_academics --db .tmp/demo-local-8030.sqlite3 --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_requests --db .tmp/demo-local-8030.sqlite3 --confirm-demo
+```
+
+Первая команда скрыто запросит выбранные вами пароли для student_a/student_b/staff_demo,
+каждый дважды; 15–128 символов. Сохраните их у себя. Команды не сбрасывают существующие
+аккаунты; после успешного заполнения повторять seed или init не нужно.
+Если подготовленный путь отсутствует в новой копии проекта, сначала явно создайте
+новую базу через `backend.migrations init --db .tmp/demo-local-8030.sqlite3`;
+эта команда отказывается перезаписывать существующую базу.
+
+Каждый последующий запуск — из той же папки:
+
+```powershell
+$env:MGIMOV_DB_PATH = '.tmp/demo-local-8030.sqlite3'
+$env:MGIMOV_ORIGIN = 'http://127.0.0.1:8030'
+& .\.venv\Scripts\python.exe -B -m uvicorn backend.app:app --host 127.0.0.1 --port 8030 --no-proxy-headers
+```
+
+В Chrome или Edge откройте **http://127.0.0.1:8030/**. Используйте именно 127.0.0.1,
+не localhost: Host/Origin защищённых API должны точно совпадать. Точка входа —
+backend/app.py, объект app (factory create_app). Остановить — Ctrl+C в PowerShell.
+Для проверки именно MGIMOv: надпись «MGIMO AI Challenge 2026 · V6», заголовок
+«Цифровой деканат будущего», предупреждение о вымышленных данных; health по адресу
+http://127.0.0.1:8030/api/health возвращает status ok после подготовки схемы.
+
+Если порт занят, не завершайте чужой процесс. Посмотрите
+`Get-NetTCPConnection -LocalPort 8030 -State Listen` и выберите свободный 8001:
+замените 8030 на 8001 **в MGIMOV_ORIGIN, --port и адресе браузера**, сохранив путь БД.
+Свободность порта проверяется на момент запуска. Порты 8000/8027 не использовать.
+Проверочный сервер запускался временно и остановлен; постоянно работающий сервер
+этим заданием не оставлен. Проверочная .tmp/local8030-check-20261105.sqlite3 — отдельная
+фикстура с отключёнными синтетическими аккаунтами, для входа её не использовать.
+
+## RC3.1 Phase 3
+
+Для новой демонстрационной SQLite создайте пустой каталог внутри `.tmp`.
+Сидер создаёт 11 студентов `s01–s11`, пять преподавателей `t01–t05`,
+трёх сотрудников деканата `d01–d03` и администратора `a01`.
+Существующая SQLite по указанному пути блокирует запуск сидера.
+
+```powershell
+New-Item -ItemType Directory -Path .tmp/phase3-local
+& .\.venv\Scripts\python.exe -B -m backend.commands.seed_attestations --db .tmp/phase3-local/demo.sqlite3 --credentials-file .tmp/phase3-local/demo.dpapi --confirm-demo
+& .\.venv\Scripts\python.exe -B -m backend.commands.demo_credentials --file .tmp/phase3-local/demo.dpapi
+$env:MGIMOV_DB_PATH = '.tmp/phase3-local/demo.sqlite3'
+$env:MGIMOV_ORIGIN = 'http://127.0.0.1:18343'
+& .\.venv\Scripts\python.exe -B -m uvicorn backend.app:app --host 127.0.0.1 --port 18343
+```
+
+Откройте `http://127.0.0.1:18343/#attestations` после входа или выберите
+«Аттестации» в меню. Пароли из DPAPI открываются под тем же пользователем Windows
+в приватном интерактивном терминале. S06 подходит для проверки английского,
+S09 и S10 показывают комиссию, S04 — исправление результата.
