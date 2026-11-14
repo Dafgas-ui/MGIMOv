@@ -2,6 +2,11 @@
 .env.*
 *.pem
 *.key
+*.crt
+*.cer
+*.pfx
+*.p12
+*.dpapi
 credentials.json
 token.json
 secrets.json
@@ -17,6 +22,8 @@ data/
 backups/
 .tmp/
 test-results/
+playwright-report/
+**/playwright/.cache/
 *.sqlite*
 *.db
 *.db-*
