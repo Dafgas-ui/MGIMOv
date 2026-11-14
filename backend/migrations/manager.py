@@ -196,6 +196,16 @@ def update(database, *, backup=None, baseline=False, create=False,
                 connection.rollback()
                 raise
     except sqlite3.Error as error:
+        if str(error) == "Conflicting legacy and Phase 3 official sources":
+            raise MigrationError(
+                "Обнаружены конфликтующие официальные источники аттестации. "
+                "Миграция отменена. Требуется сверка с доверенной копией."
+            ) from None
+        if str(error) == "BRS hundredths contain fractional or incompatible data":
+            raise MigrationError(
+                "Найдены дробные или несовместимые данные БРС. "
+                "Миграция отменена, требуется проверка исходных записей."
+            ) from None
         if "locked" in str(error).lower() or "busy" in str(error).lower():
             raise MigrationError("База занята другим процессом. Повторите операцию позже.") from None
         raise MigrationError("Ошибка SQL; изменения схемы и истории отменены.") from None

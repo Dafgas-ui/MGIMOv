@@ -1,0 +1,16 @@
+.mvp-section { margin-top:24px; scroll-margin-top:20px; }
+.page-navigation { display:flex; flex-wrap:wrap; gap:10px 18px; }
+.mvp-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:16px; margin:20px 0; }
+.mvp-item { min-width:0; padding:16px; border:1px solid var(--border); border-radius:var(--radius); overflow-wrap:anywhere; }
+.mvp-item h3 { margin:0 0 8px; }
+.mvp-item p { white-space:pre-wrap; }
+.mvp-item button { margin:6px 8px 6px 0; }
+.mvp-unread { border-left:4px solid var(--accent); }
+.mvp-form { margin:20px 0; padding:16px; border:1px solid var(--border); border-radius:var(--radius); }
+.mvp-document { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
+.mvp-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.mvp-actions > button { flex:1 1 140px; }
+#mvp-status { min-height:1.6em; }
+@media(max-width:600px) { .mvp-item button { width:100%; margin-right:0; } }
+
+.mvp-form > button, .mvp-form fieldset > button { margin-top:12px; }

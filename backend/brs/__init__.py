@@ -1,0 +1,1 @@
+"""Ball rating system foundation."""

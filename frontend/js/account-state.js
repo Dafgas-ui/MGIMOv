@@ -2,9 +2,9 @@
 export function createAccountState({request, readCsrf, publish, signalChange = () => {}, timeoutMs = 10000}) {
   let generation = 0, active = null, busy = false, owner = null, logoutOwner = null, checkingOwner = null;
   const emit = (state, message, extra = {}) => publish({state,message,...extra});
-  function clear(message = 'Проверьте вход в систему.') {
+  function clear(message = 'Проверьте вход в систему.', {preserveRoute=false}={}) {
     generation++; active?.abort(); active = null; busy = false; owner = null; checkingOwner = null;
-    emit('anonymous',message);
+    emit('anonymous',message,{preserveRoute});
   }
   function suspend() {
     const expected=owner || checkingOwner;
@@ -79,6 +79,7 @@ export function createAccountState({request, readCsrf, publish, signalChange = (
 }
 
 export const appearancePalettes = Object.freeze({
+  blue:{name:'Синий',color:'#14588f'},
   emerald:{name:'Emerald',color:'#245c45'},
   ocean:{name:'Ocean',color:'#185b87'},
   bordeaux:{name:'Bordeaux',color:'#842f49'},
@@ -87,7 +88,11 @@ export const appearancePalettes = Object.freeze({
   slate:{name:'Slate',color:'#4c5b66'}
 });
 
-const appearanceDefault = Object.freeze({version:1,theme:'system',palette:'emerald',custom:'#245c45'});
+const appearanceDefault = Object.freeze({version:2,theme:'light',palette:'blue',custom:appearancePalettes.blue.color});
+export const appearanceSurfaces = Object.freeze({
+  light:Object.freeze({background:'#f7f9fc',surface:'#ffffff',soft:'#edf3f9',feature:'#e8f2f8'}),
+  dark:Object.freeze({background:'#101923',surface:'#172635',soft:'#1c2e3e',feature:'#1b3851'})
+});
 const validAppearanceHex = value => typeof value==='string' && /^#[\da-f]{6}$/i.test(value);
 const appearanceRgb = value => [1,3,5].map(index=>parseInt(value.slice(index,index+2),16));
 const appearanceHex = values => '#'+values.map(value=>Math.round(value).toString(16).padStart(2,'0')).join('');
@@ -107,20 +112,18 @@ export function appearanceContrast(first,second) {
 export function normalizeAppearance(input={}) {
   if(!input||typeof input!=='object')input={};
   return {
-    version:1,
-    theme:['system','light','dark'].includes(input.theme)?input.theme:'system',
-    palette:Object.hasOwn(appearancePalettes,input.palette)||input.palette==='custom'?input.palette:'emerald',
-    custom:validAppearanceHex(input.custom)?input.custom.toLowerCase():appearancePalettes.emerald.color
+    version:appearanceDefault.version,
+    theme:['system','light','dark'].includes(input.theme)?input.theme:appearanceDefault.theme,
+    palette:Object.hasOwn(appearancePalettes,input.palette)||input.palette==='custom'?input.palette:appearanceDefault.palette,
+    custom:validAppearanceHex(input.custom)?input.custom.toLowerCase():appearanceDefault.custom
   };
 }
 export function calculateAppearanceAccent(seed,theme='light') {
-  seed=validAppearanceHex(seed)?seed.toLowerCase():appearancePalettes.emerald.color;
+  seed=validAppearanceHex(seed)?seed.toLowerCase():appearanceDefault.custom;
   const dark=theme==='dark';
-  const background=dark?'#171e1a':'#f7f7f2';
-  const surface=dark?'#1e2721':'#ffffff';
-  const soft=dark?'#26332a':'#edf0e9';
+  const {background,surface,soft,feature}=appearanceSurfaces[dark?'dark':'light'];
   const accentSoft=appearanceMix(background,seed,dark?.12:.07);
-  const surfaces=[background,surface,soft,accentSoft];
+  const surfaces=[background,surface,soft,feature,accentSoft];
   let accent=seed;
   for(let step=0;step<=255;step++) {
     const candidate=appearanceMix(seed,dark?'#ffffff':'#000000',step/255);
@@ -172,12 +175,21 @@ export function createAppearanceState({storage=null,cryptoObject=globalThis.cryp
       key=nextKey;
       if(!storage){persistence='unavailable';emit();return;}
       if(revision!==capturedRevision){persist();emit();return;}
+      persistence='ready';
       const raw=storage.getItem(key);
       if(raw) {
         const saved=JSON.parse(raw);
-        if(saved?.version===1)settings=normalizeAppearance(saved);
+        if(saved?.version===2)settings=normalizeAppearance(saved);
+        if(saved?.version===1){
+          // V1 did not distinguish selecting Emerald from inheriting its default.
+          settings=normalizeAppearance({...saved,
+            palette:saved.palette==='emerald'?appearanceDefault.palette:saved.palette,
+            custom:saved.palette!=='custom'&&saved.custom===appearancePalettes.emerald.color?appearanceDefault.custom:saved.custom
+          });
+          persist();
+        }
       }
-      persistence='ready';emit();
+      emit();
     } catch {
       if(request!==generation)return;
       key=null;persistence='unavailable';emit();

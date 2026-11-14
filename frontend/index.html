@@ -1,32 +1,45 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="light" data-theme-mode="light" data-palette="blue">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#f7f7f2">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f7f9fc">
   <title>Цифровой деканат — конкурсный концепт</title>
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/mvp.css">
+  <link rel="stylesheet" href="/css/design.css">
   <script type="module" src="/js/app.js"></script>
   <script type="module" src="/js/account.js"></script>
 </head>
 <body>
-<main>
-  <header>
-    <p class="eyebrow">MGIMO AI Challenge 2026 · V6</p>
-    <h1>Цифровой деканат будущего</h1>
-    <p class="notice">Конкурсный концепт. Неофициальный сервис. Все данные вымышлены</p>
-    <p class="muted">Личный кабинет, расписание и успеваемость в одном месте.</p>
-    <nav class="page-navigation" aria-label="Разделы страницы"><a href="#settings-section">Настройки</a></nav>
-  </header>
-  <div class="grid">
-    <section class="card" aria-labelledby="connection-title">
-      <h2 id="connection-title">Состояние приложения</h2>
-      <p id="server-status" role="status" aria-live="polite">Проверяем соединение…</p>
-      <button id="retry" type="button">Повторить проверку</button>
-    </section>
-    <section class="card" aria-labelledby="identity-title">
+<a class="skip" href="#main-content">К содержанию</a>
+<header class="app-header">
+  <a class="brand" href="#home">MGIMO<span>v</span></a>
+  <span class="app-context">Цифровой деканат<small>Неофициальный конкурсный сервис</small></span>
+  <div class="desktop-nav">
+    <button id="app-nav-prev" type="button" aria-label="Прокрутить разделы влево" aria-controls="app-sidebar" hidden>‹</button>
+    <nav id="app-sidebar" tabindex="0" aria-label="Основные разделы"></nav>
+    <button id="app-nav-next" type="button" aria-label="Прокрутить разделы вправо" aria-controls="app-sidebar" hidden>›</button>
+  </div>
+  <a class="app-account" id="app-account-link" href="#profile">Аккаунт</a>
+  <button id="language-toggle" type="button" aria-label="Переключить язык">EN</button>
+</header>
+<div class="app-shell">
+  <main id="main-content" tabindex="-1">
+    <div class="heading"><div><p id="page-kicker" class="eyebrow">MGIMOv</p><h1 id="page-title" tabindex="-1">Вход в кабинет</h1><p id="page-subtitle" class="muted">Учёба и взаимодействие с деканатом в одном месте</p></div></div>
+    <p id="identity-status" class="identity-status" role="status" aria-live="polite"></p>
+    <div class="app-search" id="app-search-area" hidden><label for="app-search">Поиск по доступным разделам</label><input id="app-search" type="search" placeholder="Например, расписание или справка" autocomplete="off"><div id="app-search-results" hidden></div></div>
+    <p id="screen-loading" role="status" hidden>Загружаем раздел…</p>
+<section id="mvp-section" class="card mvp-section" aria-labelledby="mvp-title" hidden>
+    <h2 id="mvp-title">Мой деканат</h2>
+    <div class="mvp-toolbar"><p id="mvp-status" role="status" aria-live="polite"></p>
+    <button id="mvp-refresh" type="button">Обновить кабинет</button></div>
+    <div id="mvp-content"></div>
+    <div id="mvp-document" aria-live="polite"></div>
+  </section>
+<section id="profile-section" class="card" aria-labelledby="identity-title">
       <h2 id="identity-title">Личный кабинет</h2>
       <p id="account-message" role="status" aria-live="polite">Проверяем вход…</p>
       <div id="login-panel">
@@ -41,16 +54,29 @@
           </fieldset>
         </form>
       </div>
-      <div id="account-panel" hidden>
+      <div id="account-panel" class="profile-card" hidden>
         <h3 id="account-title">Профиль</h3>
         <dl id="profile-details"></dl>
         <p><a href="#settings-section">Открыть настройки аккаунта</a></p>
       </div>
       <button id="account-check" type="button">Проверить вход</button>
-      <p class="muted">Уведомления — в разработке.</p>
-    </section>
-  </div>
-  <section id="settings-section" class="card schedule-section settings-section" aria-labelledby="settings-title">
+      <button id="logout-retry" type="button" hidden>Повторить выход</button>
+      <p class="muted">Уведомления и готовые справки доступны после входа в разделе «Мой деканат».</p>
+    <section class="card mvp-section" aria-labelledby="registration-title">
+    <details><summary id="registration-title">Регистрация по приглашению</summary>
+      <p>Нужен одноразовый код от организатора демонстрации. Роль студента и группа назначаются сервером. Не вводите реальные персональные данные.</p>
+      <form id="registration-form"><fieldset>
+        <legend>Новый демонстрационный аккаунт</legend>
+        <label for="registration-login">Логин</label><input id="registration-login" name="login" minlength="3" maxlength="64" pattern="[a-zA-Z0-9_.-]+" autocomplete="username" required>
+        <label for="registration-name">Вымышленное имя</label><input id="registration-name" name="full_name" maxlength="120" required>
+        <label for="registration-password">Пароль (15–128 символов)</label><input id="registration-password" name="password" type="password" minlength="15" maxlength="128" autocomplete="new-password" required>
+        <label for="registration-invitation">Одноразовое приглашение</label><input id="registration-invitation" name="invitation" type="password" minlength="43" maxlength="43" autocomplete="off" required>
+        <button type="submit">Зарегистрироваться</button>
+      </fieldset></form>
+      <p id="registration-status" role="status" aria-live="polite"></p>
+    </details>
+  </section></section>
+<section id="settings-section" class="card schedule-section settings-section screen-off" aria-labelledby="settings-title">
     <h2 id="settings-title">Настройки</h2>
     <p class="muted">Оформление применяется сразу. Для каждого вошедшего аккаунта настройки сохраняются отдельно на этом устройстве.</p>
     <div class="settings-grid">
@@ -59,11 +85,12 @@
         <label for="appearance-theme">Тема</label>
         <select id="appearance-theme">
           <option value="system">Как в системе</option>
-          <option value="light">Светлая</option>
+          <option value="light" selected>Светлая</option>
           <option value="dark">Тёмная</option>
         </select>
         <label for="appearance-palette">Акцентный цвет</label>
         <select id="appearance-palette">
+          <option value="blue" selected>Синий (стандарт)</option>
           <option value="emerald">Emerald</option>
           <option value="ocean">Ocean</option>
           <option value="bordeaux">Bordeaux</option>
@@ -73,7 +100,7 @@
           <option value="custom">Свой цвет</option>
         </select>
         <label for="appearance-custom">Свой акцентный цвет</label>
-        <input id="appearance-custom" type="color" value="#245c45" aria-describedby="appearance-custom-help">
+        <input id="appearance-custom" type="color" value="#14588f" aria-describedby="appearance-custom-help">
         <p id="appearance-custom-help" class="muted">Для применения выберите «Свой цвет» в списке.</p>
         <p id="appearance-contrast" class="muted" role="status" aria-live="polite"></p>
         <p id="appearance-storage-status" class="muted" role="status" aria-live="polite"></p>
@@ -83,11 +110,10 @@
         <h3 id="settings-account-title">Аккаунт</h3>
         <p id="settings-account-message" class="muted" role="status" aria-live="polite">Войдите, чтобы увидеть состояние аккаунта.</p>
         <button id="logout" type="button" hidden>Выйти из аккаунта</button>
-        <button id="logout-retry" type="button" hidden>Повторить выход</button>
       </section>
     </div>
   </section>
-  <section id="schedule-section" class="card schedule-section" aria-labelledby="schedule-title" hidden>
+<section id="schedule-section" class="card schedule-section" aria-labelledby="schedule-title" hidden>
     <h2 id="schedule-title">Расписание</h2>
     <p id="schedule-status" role="status" aria-live="polite"></p>
     <div class="schedule-toolbar" aria-label="Режим расписания">
@@ -104,15 +130,21 @@
       <button id="schedule-now" type="button">К сегодняшней дате</button>
       <button id="schedule-retry" type="button">Обновить</button>
     </div>
-    <div id="schedule-days"></div>
+    <div id="schedule-days" tabindex="0" role="region" aria-label="Занятия по дням"></div>
   </section>
-  <section id="academics-section" class="card schedule-section" aria-labelledby="academics-title" hidden>
+<section id="academics-section" class="card schedule-section" aria-labelledby="academics-title" hidden>
     <h2 id="academics-title">Успеваемость</h2>
     <p id="academics-status" role="status" aria-live="polite"></p>
     <button id="academics-retry" type="button">Обновить успеваемость</button>
     <div id="academics-content"></div>
   </section>
-  <section id="requests-section" class="card schedule-section" aria-labelledby="requests-title" hidden>
+<section id="attestations-section" class="card screen-off" aria-labelledby="attestations-title" hidden>
+    <h2 id="attestations-title">Аттестации</h2>
+    <p id="attestations-status" role="status" aria-live="polite"></p>
+    <button id="attestations-retry" type="button">Обновить</button>
+    <div id="attestations-content"></div>
+  </section>
+<section id="requests-section" class="card schedule-section" aria-labelledby="requests-title" hidden>
     <h2 id="requests-title">Мои обращения</h2>
     <p id="requests-status" role="status" aria-live="polite"></p>
     <div id="request-recovery" class="notice" hidden>
@@ -145,8 +177,21 @@
     </form>
     <div id="requests-content"></div>
   </section>
-  <noscript><p class="notice">Для проверки соединения включите JavaScript. Стартовая страница доступна без него.</p></noscript>
-  <footer>Самостоятельный конкурсный прототип · Без подключений к внутренним системам университета</footer>
-</main>
-</body>
-</html>
+<section id="history-section" class="card" aria-labelledby="history-title"><h2 id="history-title">История выбранного обращения</h2><p class="notice">Это история выбранного обращения, а не общий журнал действий Staff.</p><div id="history-content"></div><a href="#requests-section">Открыть очередь и выбрать обращение</a></section>
+<nav id="legacy-navigation" hidden><a id="nav-home" href="#mvp-section">Главная</a><a id="nav-schedule" href="#schedule-section">Расписание</a><a id="nav-academics" href="#academics-section">Зачётка</a><a id="nav-requests" href="#requests-section">Обращения</a><a id="nav-notifications" href="#notifications-section">Уведомления</a><a id="nav-documents" href="#documents-section">Документы</a><a id="nav-staff" href="#staff-section">Кабинет Staff</a></nav>
+<details class="connection-details"><summary>Состояние приложения</summary>
+<section class="connection-panel" aria-labelledby="connection-title">
+      <h2 id="connection-title">Состояние приложения</h2>
+      <p id="server-status" role="status" aria-live="polite">Проверяем соединение…</p>
+      <button id="retry" type="button">Повторить проверку</button>
+    </section>
+</details>
+<noscript><p class="notice">Для работы с кабинетом включите JavaScript.</p></noscript>
+<footer>Конкурсный концепт. Неофициальный сервис. Все данные вымышлены<br>Все справки и подписи демонстрационные</footer>
+</main></div>
+<div id="app-mobile-bar" class="mobilebar" hidden>
+  <nav id="app-bottom" aria-label="Быстрые разделы" hidden></nav>
+  <button id="app-menu" type="button" aria-expanded="false" aria-controls="app-mobile-menu">Все разделы</button>
+  <nav id="app-mobile-menu" aria-label="Все разделы" hidden></nav>
+</div>
+</body></html>

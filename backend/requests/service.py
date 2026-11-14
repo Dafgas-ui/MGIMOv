@@ -5,6 +5,7 @@ import re
 import uuid
 from ..auth.service import AuthError,resolve,verify_csrf
 from ..db import connection
+from ..events import notify,audit
 
 TYPES={'study_certificate','general_certificate','appeal'}
 TRANSITIONS={'submitted':{'processing'},'processing':{'approved','rejected'}}
@@ -63,6 +64,8 @@ def details(db,row,role):
     if role=='staff':
         owner=db.execute('SELECT p.full_name,g.name AS study_group FROM student_profiles p JOIN study_groups g ON g.id=p.group_id WHERE p.user_id=?',(row['student_id'],)).fetchone()
         result['student']=dict(owner)
+        document=db.execute('SELECT id,signed_at,delivered_at FROM demo_documents WHERE request_id=?',(row['id'],)).fetchone()
+        result['document']=dict(document) if document else None
     return result
 
 
@@ -103,6 +106,7 @@ def create_in_transaction(db,user,kind,purpose,message,key,now):
     db.execute('INSERT INTO student_requests VALUES (?,?,?,?,?,?,?,1,?,?,?,?)',
         (key_id,user['id'],faculty['faculty_id'],kind,purpose,message,'submitted',now,now,key,fingerprint))
     row=authorized_request(db,user,key_id,'student');history(db,row,user,None,'Обращение отправлено студентом.',now)
+    notify(db,user['id'],'Обращение отправлено','Статус и ответ появятся в разделе обращений.','request',key_id,now)
     return details(db,row,'student'),True
 
 
@@ -126,6 +130,9 @@ def transition_in_transaction(db,user,request_id,version,action,comment,now):
     db.execute('UPDATE student_requests SET status=?,version=version+1,updated_at=? WHERE id=? AND version=?',
         (target,now,request_id,version))
     updated=authorized_request(db,user,request_id,role);history(db,updated,user,row['status'],comment,now)
+    if role=='staff':
+        notify(db,row['student_id'],'Статус обращения изменён',comment,'request',request_id,now)
+        audit(db,user,'request.'+target,'request',request_id,updated['version'],now)
     return details(db,updated,role)
 
 

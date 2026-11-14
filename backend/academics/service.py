@@ -6,6 +6,7 @@ from ..auth.service import AuthError, resolve
 from ..config import ROOT
 from ..db import connection
 from ..schedule.service import MOSCOW, calendar_date
+from .attestation import gradebook_items
 
 
 def successful(attempt):
@@ -35,7 +36,7 @@ def summarize(items):
     return {'state':'ready' if required else 'no_data','total':len(required),
             'completed':completed,'upcoming':count({'upcoming'}),
             'debts':count({'failed','absent','overdue'}),
-            'pending':count({'not_held','ungraded','unscheduled'}),
+            'pending':count({'not_held','ungraded','unscheduled','not_admitted'}),
             'percent':round(completed*100/len(required)) if required else None}
 
 
@@ -48,7 +49,7 @@ def read_academics(service, token, expected=None):
         # Ownership is fixed by session even if group/program changes later.
         rows=db.execute('''SELECT sa.id, a.id AS assessment_id, s.id AS semester_id,
             s.name AS semester, s.starts_on, s.ends_on, sub.name AS subject,
-            c.control,c.required,a.scheduled_on,a.deadline_on,a.status AS event_status
+            c.id AS curriculum_id,c.control,c.required,a.scheduled_on,a.deadline_on,a.status AS event_status
             FROM student_assessments sa JOIN assessments a ON a.id=sa.assessment_id
             JOIN curriculum_items c ON c.id=a.curriculum_id
             JOIN subjects sub ON sub.id=c.subject_id JOIN semesters s ON s.id=c.semester_id
@@ -60,12 +61,18 @@ def read_academics(service, token, expected=None):
             WHERE sa.student_id=? ORDER BY t.assignment_id,t.number''',(user['id'],)):
             item=dict(row);attempts.setdefault(item.pop('assignment_id'),[]).append(item)
         semesters={}
-        for row in rows:
+        official=gradebook_items(db,user['id'],today)
+        official_positions={row['curriculum_id'] for row in official}
+        legacy=[row for row in rows if row['curriculum_id'] not in official_positions]
+        for row in [*legacy,*official]:
             item=dict(row);key=item.pop('semester_id');name=item.pop('semester')
+            item.pop('curriculum_id')
             start=item.pop('starts_on');end=item.pop('ends_on')
             semester=semesters.setdefault(key,{'id':key,'name':name,'starts_on':start,'ends_on':end,'items':[]})
-            item['required']=bool(item['required']);item['attempts']=attempts.get(item['id'],[])
-            item['status']=academic_status(item,item['attempts'],today)
+            item['required']=bool(item['required'])
+            if 'official_result' not in item:
+                item['attempts']=attempts.get(item['id'],[])
+                item['status']=academic_status(item,item['attempts'],today)
             semester['items'].append(item)
         current=[s for s in semesters.values() if s['starts_on']<=today<=s['ends_on']]
         if len(current)>1:raise AuthError(503,'Учебный период временно недоступен.')

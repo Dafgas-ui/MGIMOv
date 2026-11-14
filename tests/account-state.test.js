@@ -82,6 +82,7 @@ test('actual account DOM adapter preserves an unfinished password across poll an
  };
  const source=readFileSync('frontend/js/account.js','utf8').replace(/^import .*;$/gm,'');
  runInNewContext(source,{document,requestJson,createAccountState,
+   mountLanguage:()=>({setUser(){}}),t:value=>value,attestationIdentity(){},
   createAppearanceState:()=>({setUser(){},update(){},reset(){},systemThemeChanged(){}}),
   location:{protocol:'http:'},addEventListener(){},setInterval:fn=>timers.push(fn)});
  await new Promise(r=>setTimeout(r,0));

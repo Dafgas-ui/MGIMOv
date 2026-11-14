@@ -8,9 +8,20 @@ from .migrations.manager import MigrationError
 from .health import Readiness
 from .schedule.routes import install_schedule
 from .academics.routes import install_academics
+from .academics.attestation_routes import install_attestations
 from .requests.routes import install_requests
+from .deanery.routes import install_deanery
+from .brs.routes import install_brs
 
 ASSETS = {
+    "/js/attestations.js": ("js/attestations.js", "text/javascript"),
+    "/js/language.js": ("js/language.js", "text/javascript"),
+    "/css/design.css": ("css/design.css", "text/css"),
+    "/js/ui-shell.js": ("js/ui-shell.js", "text/javascript"),
+    "/js/ui-state.js": ("js/ui-state.js", "text/javascript"),
+    "/css/mvp.css": ("css/mvp.css", "text/css"),
+    "/js/mvp.js": ("js/mvp.js", "text/javascript"),
+    "/js/mvp-state.js": ("js/mvp-state.js", "text/javascript"),
     "/js/request-operation.js": ("js/request-operation.js", "text/javascript"),
     "/": ("index.html", "text/html"),
     "/css/tokens.css": ("css/tokens.css", "text/css"),
@@ -37,7 +48,10 @@ def create_app(settings: Settings | None = None):
     install_identity(application,settings)
     install_schedule(application,settings)
     install_academics(application,settings)
+    install_attestations(application,settings)
     install_requests(application,settings)
+    install_deanery(application,settings)
+    install_brs(application,settings)
     readiness = Readiness(settings)
 
     @application.get("/api/health")

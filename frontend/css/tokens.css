@@ -1,67 +1,74 @@
 :root {
   color-scheme: light dark;
-  --background: #f7f7f2;
-  --surface: #fff;
+  --background: #f7f9fc;
+  --surface: #ffffff;
+  --surface-feature: #e8f2f8;
   --card: var(--surface);
-  --soft: #edf0e9;
-  --border: #ccd3c9;
-  --text: #202a24;
-  --muted: #5c685e;
-  --accent: #245c45;
+  --soft: #edf3f9;
+  --border: #c8d0d5;
+  --text: #182738;
+  --muted: #526171;
+  --accent: #14588f;
   --on-accent: #fff;
-  --accent-soft: #e5eee4;
-  --focus: #286bba;
+  --accent-soft: #e7eef4;
+  --focus: #14588f;
   --purple: var(--accent);
   --mint: var(--accent);
-  --success: #285f39;
-  --warning: #795413;
-  --danger: #a1342c;
+  --success: #286344;
+  --warning: #815300;
+  --danger: #963a37;
   --radius: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --background: #171e1a;
-    --surface: #1e2721;
-    --soft: #26332a;
-    --border: #465247;
-    --text: #eef0e7;
-    --muted: #b1bcae;
-    --accent: #b2cfa4;
-    --on-accent: #172319;
-    --accent-soft: #2e4131;
-    --focus: #9bc6ff;
-    --success: #b0d3a6;
-    --warning: #e6c58a;
-    --danger: #ffb4a7;
+    --background: #101923;
+    --surface: #172635;
+    --soft: #1c2e3e;
+    --surface-feature: #1b3851;
+    --border: #435b70;
+    --text: #edf3f7;
+    --muted: #bcc9d3;
+    --accent: #7ca2c1;
+    --on-accent: #111611;
+    --accent-soft: #102130;
+    --focus: #7ca2c1;
+    --success: #9dd1ae;
+    --warning: #ffd386;
+    --danger: #ffb4aa;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #171e1a;
-  --surface: #1e2721;
-  --soft: #26332a;
-  --border: #465247;
-  --text: #eef0e7;
-  --muted: #b1bcae;
-  --success: #b0d3a6;
-  --warning: #e6c58a;
-  --danger: #ffb4a7;
+  --background: #101923;
+  --surface: #172635;
+  --soft: #1c2e3e;
+  --surface-feature: #1b3851;
+  --accent: #7ca2c1;
+  --on-accent: #111611;
+  --accent-soft: #102130;
+  --focus: #7ca2c1;
+  --border: #435b70;
+  --text: #edf3f7;
+  --muted: #bcc9d3;
+  --success: #9dd1ae;
+  --warning: #ffd386;
+  --danger: #ffb4aa;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --background: #f7f7f2;
-  --surface: #fff;
-  --soft: #edf0e9;
-  --border: #ccd3c9;
-  --text: #202a24;
-  --muted: #5c685e;
-  --success: #285f39;
-  --warning: #795413;
-  --danger: #a1342c;
+  --background: #f7f9fc;
+  --surface: #ffffff;
+  --soft: #edf3f9;
+  --border: #c8d0d5;
+  --text: #182738;
+  --muted: #526171;
+  --success: #286344;
+  --warning: #815300;
+  --danger: #963a37;
 }
 
 /* Keep existing system theme responsive to OS changes until a user selects a fixed theme. */

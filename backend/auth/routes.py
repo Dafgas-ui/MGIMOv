@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from .service import AuthError, AuthService, valid_token
 from .http import IdentityGuard
+from .registration import register
 from ..profiles import own_profile
 from ..security.passwords import PasswordCapacityError
 
@@ -16,6 +17,10 @@ class Login(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
     login:str=Field(min_length=3,max_length=64,pattern=r'^[a-zA-Z0-9_.-]+$')
     password:SecretStr=Field(min_length=1,max_length=128)
+
+class Registration(Login):
+    full_name:str=Field(min_length=1,max_length=120)
+    invitation:SecretStr=Field(min_length=43,max_length=43)
 
 class Empty(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -68,6 +73,14 @@ def install_identity(app,settings):
         cookie(response,settings.csrf_cookie,csrf,False,settings.session_seconds)
         response.delete_cookie(settings.login_csrf_cookie,path='/',secure=settings.secure,httponly=True,samesite='strict')
         return {'user':user}
+
+    @router.post('/auth/register',status_code=201)
+    def registration(body:Registration,request:Request):
+        clean_query(request)
+        header=request.headers.get('x-csrf-token');saved=request.cookies.get(settings.login_csrf_cookie)
+        if not valid_token(header) or not valid_token(saved) or not hmac.compare_digest(header,saved):raise AuthError(403,'Проверка CSRF не пройдена.')
+        if request.cookies.get(settings.session_cookie):raise AuthError(409,'Выйдите из аккаунта перед регистрацией.')
+        return register(service,body.login,body.password.get_secret_value(),body.full_name,body.invitation.get_secret_value(),request.client.host if request.client else 'unknown')
 
     @router.get('/auth/me')
     def me(request:Request):
