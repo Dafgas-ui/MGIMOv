@@ -862,3 +862,33 @@ Python запускался с разрешённым loopback Windows, кото
 Проверены чтение прежней истории, создание новой версии и повторной сдачи,
 удаление черновика без связей, обновление заполненной базы с 0014 до 0019,
 откат ошибочной 0019, повторный запуск мигратора и обе проверки SQLite.
+
+## RC4.1 — HTTP API учебных работ
+
+Локальное дерево поверх `b0e6097`, синтетические временные SQLite и разрешённый
+loopback Windows. HTTP-тесты отправляют запросы через FastAPI TestClient с
+реальными сессиями фикстур и middleware.
+
+- `.\.venv\Scripts\python.exe -B -m unittest tests.test_coursework_http -v` — 4/4, exit 0.
+- `.\.venv\Scripts\python.exe -B -m unittest discover -s tests -q` — 169/169, exit 0.
+- `npm test` — 79/79, exit 0.
+- `git diff --check` — exit 0.
+
+Проверены Student/Staff, отсутствие назначения и его истечение, недоступность
+чужой работы, Origin/CSRF, повтор и конфликт версии, просрочка, история и
+повторная сдача, код конфликта БРС, очная сдача, копирование между потоками,
+исторический семестр, ошибки JSON и временная блокировка SQLite.
+
+### Повторная проверка HTTP API после замечаний Luna
+
+Рабочее дерево поверх `b0e6097`, временные синтетические SQLite и разрешённый loopback.
+
+- `.\.venv\Scripts\python.exe -B -m unittest tests.test_coursework_http -v` — 7/7, exit 0.
+- `.\.venv\Scripts\python.exe -B -m unittest discover -s tests -q` — 172/172, exit 0.
+- `npm test` — 79/79, exit 0.
+- `git diff --check` — exit 0.
+
+Проверены 4000/4001 кодовых точек ASCII, кириллицы и emoji, 32768/32769
+байт на сдаче, прежний лимит Staff, оба вида конкурентного повтора, изоляция
+новых полей, фактический перевод, отзыв назначения, смена серверной роли и
+истечение сессии. Запросы выполнялись через FastAPI TestClient и HTTP middleware.

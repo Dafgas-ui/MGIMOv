@@ -1,7 +1,10 @@
 """Bounded JSON requests with exact origin/host; no CORS or unsafe bypass."""
 import asyncio
+import re
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
+
+TEXT_SUBMISSION = re.compile(r'/api/v1/me/coursework/[A-Za-z0-9_-]{1,100}/submissions')
 
 class IdentityGuard:
     def __init__(self, app, settings, body_timeout=10.0):
@@ -26,13 +29,15 @@ class IdentityGuard:
             return await reject(403)
         if len(headers.getlist('x-csrf-token'))>1 or len(headers.getlist('x-mgimov-user'))>1:
             return await reject(400)
+        body_limit = 32768 if scope['method'] == 'POST' and TEXT_SUBMISSION.fullmatch(path) else 8192
         async def read_body():
             body=bytearray()
             while True:
                 message=await receive()
                 if message['type']=='http.disconnect':return None
-                body.extend(message.get('body',b''))
-                if len(body)>8192:return False
+                chunk=message.get('body',b'')
+                if len(body)+len(chunk)>body_limit:return False
+                body.extend(chunk)
                 if not message.get('more_body',False):return body
         try:
             body=await asyncio.wait_for(read_body(),timeout=self.body_timeout)

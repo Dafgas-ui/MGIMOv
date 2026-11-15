@@ -55,13 +55,17 @@ def curriculum(db, key):
     return get(db, CURRICULUM + " WHERE c.id=?", key)
 
 
-def offering(db, key):
-    return get(db, """SELECT o.*, c.id AS curriculum_id, c.subject_id, c.semester_id,
-        pr.faculty_id, s.starts_on, s.ends_on
+OFFERINGS = """SELECT o.*, c.id AS curriculum_id, c.subject_id, c.semester_id,
+        pr.faculty_id, s.starts_on, s.ends_on, subject.name AS subject_name, gname.name AS group_name
         FROM brs_offerings o JOIN brs_whole_plans p ON p.id=o.plan_id
         JOIN curriculum_items c ON c.id=p.curriculum_id
         JOIN programs pr ON pr.id=c.program_id JOIN semesters s ON s.id=c.semester_id
-        WHERE o.id=? AND p.locked_at IS NOT NULL""", key)
+        JOIN subjects subject ON subject.id=c.subject_id JOIN study_groups gname ON gname.id=o.group_id
+        WHERE p.locked_at IS NOT NULL"""
+
+
+def offering(db, key):
+    return get(db, OFFERINGS + " AND o.id=?", key)
 
 
 def plan_data(db, key):
@@ -223,37 +227,40 @@ def revoke_teaching(db, actor, now, key):
     return {"id": key}
 
 
-def teaching_access(db, actor, now, key, *, enrollment_id=None, event_code=None, confirm=False):
+def teaching_offerings(db, actor, now, key=None, *, semester_id=None, event_code=None, confirm=False):
     if actor["role"] != "staff":
         fail(403, "Доступно преподавателю.")
-    flow = offering(db, key)
-    if not flow["starts_on"] <= date_at(now) <= flow["ends_on"]:
+    return db.execute(OFFERINGS + """ AND (? IS NULL OR o.id=?)
+        AND (? IS NULL OR c.semester_id=?) AND ? BETWEEN s.starts_on AND s.ends_on
+        AND EXISTS (
+            SELECT 1 FROM brs_whole_teaching_grants g
+            JOIN brs_whole_teacher_accounts t ON t.staff_id=g.staff_id JOIN lessons l ON l.id=g.lesson_id
+            WHERE g.offering_id=o.id AND g.staff_id=? AND g.revoked_at IS NULL
+            AND g.starts_at<=? AND g.expires_at>? AND l.teacher_id=t.teacher_id
+            AND l.group_id=o.group_id AND l.subject_id=c.subject_id AND l.status='scheduled'
+            AND l.date BETWEEN s.starts_on AND s.ends_on AND (?=0 OR g.can_confirm_final=1)
+            AND (g.event_code IS NULL OR g.event_code=?)
+            AND NOT EXISTS (
+                SELECT 1 FROM lesson_changes ch WHERE ch.lesson_id=g.lesson_id
+                AND ch.version>g.lesson_version
+                AND (json_extract(ch.after_json,'$.teacher_id') IS NOT t.teacher_id
+                     OR json_extract(ch.after_json,'$.status') IS NOT 'scheduled'
+                     OR coalesce(json_extract(ch.after_json,'$.date') BETWEEN s.starts_on AND s.ends_on,0)=0)
+            )
+        ) ORDER BY o.id""",
+        (key, key, semester_id, semester_id, date_at(now), actor["id"], now, now, int(confirm), event_code))
+
+
+def teaching_access(db, actor, now, key, *, enrollment_id=None, event_code=None, confirm=False):
+    flow = teaching_offerings(db, actor, now, key, event_code=event_code, confirm=confirm).fetchone()
+    if flow is None:
         fail(404)
     if enrollment_id is not None:
         get(db, """SELECT id FROM brs_enrollments WHERE id=? AND offering_id=?
             AND starts_on<=? AND ends_on IS NULL""", enrollment_id, key, date_at(now))
     if event_code is not None:
         get(db, "SELECT code FROM brs_events WHERE plan_id=? AND code=?", flow["plan_id"], event_code)
-    grants = db.execute("""SELECT g.*, t.teacher_id FROM brs_whole_teaching_grants g
-        JOIN brs_whole_teacher_accounts t ON t.staff_id=g.staff_id JOIN lessons l ON l.id=g.lesson_id
-        WHERE g.offering_id=? AND g.staff_id=? AND g.revoked_at IS NULL
-        AND g.starts_at<=? AND g.expires_at>? AND l.teacher_id=t.teacher_id
-        AND l.group_id=? AND l.subject_id=? AND l.status='scheduled'
-        AND l.date BETWEEN ? AND ? AND (?=0 OR g.can_confirm_final=1)
-        AND (g.event_code IS NULL OR g.event_code=?)""",
-        (key, actor["id"], now, now, flow["group_id"], flow["subject_id"],
-         flow["starts_on"], flow["ends_on"], int(confirm), event_code))
-    for grant in grants:
-        changes = db.execute("SELECT after_json FROM lesson_changes WHERE lesson_id=? AND version>?",
-                             (grant["lesson_id"], grant["lesson_version"]))
-        for row in changes:
-            after = json.loads(row["after_json"])
-            if (after["teacher_id"] != grant["teacher_id"] or after["status"] != "scheduled"
-                    or not flow["starts_on"] <= after["date"] <= flow["ends_on"]):
-                break
-        else:
-            return flow
-    fail(404)
+    return flow
 
 
 def enroll(db, actor, now, key, data):

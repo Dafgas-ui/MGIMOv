@@ -5,7 +5,7 @@ import re
 from uuid import uuid4
 
 from .auth.service import AuthError
-from .brs.service import date_at, fail, get, teaching_access
+from .brs.service import date_at, fail, get, teaching_access, teaching_offerings
 from .events import audit
 
 
@@ -14,25 +14,34 @@ def create_draft(db, actor, now, offering_id, *, kind, title, description, due_a
     if not db.in_transaction:
         raise RuntimeError('Coursework commands require a write transaction.')
     flow = teaching_access(db, actor, now, offering_id)
+    fields = draft_fields(flow, now, kind=kind, title=title, description=description, due_at=due_at, mode=mode)
+    key = uuid4().hex
+    db.execute("""INSERT INTO coursework_assignments
+        (id,offering_id,created_by,kind,title,description,due_at,mode,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)""",
+        (key, offering_id, actor['id'], *fields, now))
+    audit(db, actor, 'coursework.draft.create', 'coursework_assignment', key, None, now)
+    return key
+
+
+DRAFT_FIELDS = ('kind', 'title', 'description', 'due_at', 'mode')
+
+
+def draft_fields(flow, now, *, kind, title, description, due_at, mode):
     if type(due_at) is not int or not now < due_at <= 4102444800:
         fail(422, 'Укажите будущий срок сдачи.')
     if date_at(due_at) > flow['ends_on']:
         fail(422, 'Срок сдачи выходит за пределы учебного периода.')
     if (kind not in ('lab', 'test', 'practice', 'other')
             or mode not in ('in_person', 'online', 'both')
-            or not isinstance(title, str) or not 1 <= len(title.strip()) <= 160
-            or not isinstance(description, str) or not 1 <= len(description.strip()) <= 4000):
+            or not isinstance(title, str) or '\0' in title or not 1 <= len(title.strip()) <= 160
+            or not isinstance(description, str) or '\0' in description or not 1 <= len(description.strip()) <= 4000):
         fail(422, 'Проверьте поля учебной работы.')
-    key = uuid4().hex
-    db.execute("""INSERT INTO coursework_assignments
-        (id,offering_id,created_by,kind,title,description,due_at,mode,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)""",
-        (key, offering_id, actor['id'], kind, title.strip(), description.strip(), due_at, mode, now))
-    audit(db, actor, 'coursework.draft.create', 'coursework_assignment', key, None, now)
-    return key
+    return kind, title.strip(), description.strip(), due_at, mode
 
 
 COMMAND_FIELDS = {
+    'edit_draft': (set(), set(DRAFT_FIELDS)),
     'publish': (set(), {'event_code', 'grading_mode', 'max_points'}),
     'copy': ({'target_offering_id'}, {'due_at'}),
     'submit_text': ({'response'}, set()),
@@ -62,13 +71,18 @@ def recipient(db, actor, assignment_id, course_id=None):
                assignment_id, course_id)
 
 
-def student_work(db, actor, assignment_id):
+def student_work(db, actor, assignment_id, *, now=None):
     if actor['role'] != 'student':
         fail(403)
     own = recipient(db, actor, assignment_id)
-    assignment = get(db, "SELECT * FROM coursework_assignments WHERE id=? AND status='published'", assignment_id)
-    args = (assignment_id, own['course_id'])
-    return {**dict(assignment), 'recipient_version': own['version'], 'attempts': [dict(row) for row in db.execute(
+    # Existing service callers use this function for history without a session clock.
+    row = get(db, STUDENT_WORKS + " AND a.id=?", actor['id'], assignment_id)
+    return {**student_summary(row, now), **work_history(db, assignment_id, own['course_id'])}
+
+
+def work_history(db, assignment_id, course_id):
+    args = (assignment_id, course_id)
+    return {'attempts': [dict(row) for row in db.execute(
         """SELECT number,method,response,submitted_at,late FROM coursework_attempts
            WHERE assignment_id=? AND course_id=? ORDER BY number""", args)],
         'reviews': [dict(row) for row in db.execute(
@@ -76,13 +90,94 @@ def student_work(db, actor, assignment_id):
                WHERE assignment_id=? AND course_id=? ORDER BY attempt_no,revision""", args)]}
 
 
-def staff_work(db, actor, now, assignment_id):
-    assignment = get(db, 'SELECT * FROM coursework_assignments WHERE id=?', assignment_id)
+WORK_FIELDS = """a.id,a.offering_id,a.kind,a.title,a.description,a.due_at,a.mode,a.created_at,
+    a.status,a.version,a.event_code,a.grading_mode,c.semester_id,s.name AS subject_name,g.name AS group_name,
+    CASE WHEN a.grading_mode='brs' THEN e.maximum ELSE a.max_points END AS max_points"""
+WORK_CONTEXT = """JOIN brs_offerings o ON o.id=a.offering_id
+    JOIN brs_whole_plans p ON p.id=o.plan_id JOIN curriculum_items c ON c.id=p.curriculum_id
+    JOIN subjects s ON s.id=c.subject_id JOIN study_groups g ON g.id=o.group_id
+    LEFT JOIN brs_events e ON (e.plan_id,e.code)=(o.plan_id,a.event_code)"""
+LATEST_ATTEMPT = """LEFT JOIN coursework_attempts t ON (t.assignment_id,t.course_id)=(r.assignment_id,r.course_id)
+    AND t.number=(SELECT max(number) FROM coursework_attempts WHERE (assignment_id,course_id)=(r.assignment_id,r.course_id))
+    LEFT JOIN coursework_reviews v ON (v.assignment_id,v.course_id,v.attempt_no)=(t.assignment_id,t.course_id,t.number)
+    AND v.revision=(SELECT max(revision) FROM coursework_reviews
+        WHERE (assignment_id,course_id,attempt_no)=(t.assignment_id,t.course_id,t.number))"""
+STUDENT_WORKS = f"""SELECT {WORK_FIELDS},r.version AS recipient_version,t.number AS latest_attempt_no,
+    v.decision AS latest_decision,n.starts_on AS enrollment_start,n.ends_on AS enrollment_end
+    FROM coursework_recipients r JOIN coursework_assignments a ON a.id=r.assignment_id
+    JOIN brs_student_courses sc ON sc.id=r.course_id
+    JOIN brs_enrollments n ON n.id=r.enrollment_id
+    {WORK_CONTEXT} {LATEST_ATTEMPT}
+    WHERE sc.student_id=? AND a.status='published'"""
+STAFF_WORKS = f"""SELECT {WORK_FIELDS}, (SELECT json_object(
+        'recipients',count(*),'submitted',count(t.number),
+        'awaiting_review',count(CASE WHEN t.number IS NOT NULL AND v.decision IS NULL THEN 1 END),
+        'reviewed',count(CASE WHEN v.decision='reviewed' THEN 1 END),
+        'returned',count(CASE WHEN v.decision IN ('returned','retry_allowed') THEN 1 END))
+        FROM coursework_recipients r {LATEST_ATTEMPT} WHERE r.assignment_id=a.id) AS queue
+    FROM coursework_assignments a {WORK_CONTEXT}"""
+
+
+def retry_allowed(decision):
+    return decision in ('returned', 'retry_allowed')
+
+
+def student_summary(row, now):
+    result = dict(row)
+    decision = result.pop('latest_decision')
+    start = result.pop('enrollment_start')
+    end = result.pop('enrollment_end')
+    attempted = result['latest_attempt_no'] is not None
+    text_available = now is not None and end is None and start <= date_at(now) and row['mode'] != 'in_person'
+    return {**result, 'latest_attempt_state': (decision or 'submitted') if attempted else None,
+            'has_latest_review': decision is not None,
+            'can_submit_text': text_available and (not attempted or retry_allowed(decision)),
+            'can_resubmit': text_available and attempted and retry_allowed(decision)}
+
+
+def student_works(db, actor, now, offering_id=None, semester_id=None):
+    if actor['role'] != 'student':
+        fail(403)
+    rows = db.execute(STUDENT_WORKS + """ AND (? IS NULL OR a.offering_id=?)
+        AND (? IS NULL OR c.semester_id=?) ORDER BY a.due_at,a.id""",
+        (actor['id'], offering_id, offering_id, semester_id, semester_id))
+    return {'items': [student_summary(row, now) for row in rows]}
+
+
+def staff_summary(row):
+    result = dict(row)
+    result['queue'] = json.loads(result['queue'])
+    return result
+
+
+def staff_works(db, actor, now, offering_id=None, semester_id=None):
+    keys = ('id', 'group_id', 'subject_id', 'semester_id', 'subject_name', 'group_name')
+    offers = [{key: flow[key] for key in keys}
+              for flow in teaching_offerings(db, actor, now, offering_id, semester_id=semester_id)]
+    rows = db.execute(STAFF_WORKS + """ WHERE a.offering_id IN (SELECT value FROM json_each(?))
+        ORDER BY a.offering_id,a.due_at,a.id""", (json.dumps([offer['id'] for offer in offers]),))
+    return {'items': [staff_summary(row) for row in rows], 'offerings': offers}
+
+
+def staff_recipient_work(db, actor, now, assignment_id, course_id):
+    assignment = get(db, "SELECT * FROM coursework_assignments WHERE id=? AND status='published'", assignment_id)
     teaching_access(db, actor, now, assignment['offering_id'])
-    roster = db.execute("""SELECT r.course_id,r.enrollment_id,r.version,c.student_id
+    own = get(db, """SELECT r.version, p.full_name AS student_name FROM coursework_recipients r
+        JOIN brs_student_courses c ON c.id=r.course_id JOIN student_profiles p ON p.user_id=c.student_id
+        WHERE r.assignment_id=? AND r.course_id=?""", assignment_id, course_id)
+    return {'course_id': course_id, 'recipient_version': own['version'],
+            'student_name': own['student_name'], **work_history(db, assignment_id, course_id)}
+
+
+def staff_work(db, actor, now, assignment_id):
+    scope = get(db, 'SELECT offering_id FROM coursework_assignments WHERE id=?', assignment_id)
+    teaching_access(db, actor, now, scope['offering_id'])
+    assignment = get(db, STAFF_WORKS + ' WHERE a.id=?', assignment_id)
+    roster = db.execute("""SELECT r.course_id,r.enrollment_id,r.version,c.student_id,p.full_name AS student_name
         FROM coursework_recipients r JOIN brs_student_courses c ON c.id=r.course_id
+        JOIN student_profiles p ON p.user_id=c.student_id
         WHERE r.assignment_id=? ORDER BY r.course_id""", (assignment_id,))
-    return {**dict(assignment), 'recipients': [dict(row) for row in roster]}
+    return {**staff_summary(assignment), 'recipients': [dict(row) for row in roster]}
 
 
 def publish(db, assignment, now, data):
@@ -132,7 +227,7 @@ def add_attempt(db, actor, now, assignment, own, method, response):
         decision = db.execute("""SELECT decision FROM coursework_reviews WHERE assignment_id=?
             AND course_id=? AND attempt_no=? ORDER BY revision DESC LIMIT 1""",
             (*args, previous)).fetchone()
-        if not decision or decision[0] not in ('returned', 'retry_allowed'):
+        if not decision or not retry_allowed(decision[0]):
             fail(409, 'Повторная сдача не разрешена.')
     number = (previous or 0) + 1
     late = now > assignment['due_at']
@@ -178,13 +273,43 @@ def review_attempt(db, actor, now, assignment, own, data):
     return {'attempt_no': attempt, 'review_revision': revision}
 
 
+def receipt_for(db, actor, request_key, payload):
+    if not isinstance(request_key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', request_key):
+        fail(422, 'Некорректный ключ повтора.')
+    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    receipt = db.execute('SELECT fingerprint,result FROM coursework_receipts WHERE actor_id=? AND request_key=?',
+                         (actor['id'], request_key)).fetchone()
+    if receipt:
+        if receipt['fingerprint'] != fingerprint:
+            fail(409, 'Ключ уже использован для другой команды.')
+        return fingerprint, json.loads(receipt['result'])
+    return fingerprint, None
+
+
+def save_receipt(db, actor, request_key, fingerprint, result):
+    db.execute('INSERT INTO coursework_receipts VALUES (?,?,?,?)',
+               (actor['id'], request_key, fingerprint, json.dumps(result)))
+
+
+def create_work(db, actor, now, offering_id, request_key, data):
+    if not db.in_transaction:
+        raise RuntimeError('Coursework commands require a write transaction.')
+    teaching_access(db, actor, now, offering_id)
+    fingerprint, previous = receipt_for(db, actor, request_key, ['create', offering_id, data])
+    if previous is not None:
+        return previous
+    key = create_draft(db, actor, now, offering_id, **data)
+    result = {'assignment_id': key, 'version': 1}
+    save_receipt(db, actor, request_key, fingerprint, result)
+    return result
+
+
 def execute(db, actor, now, assignment_id, action, *, expected_version, request_key, data):
     """Execute a validated command with an identity supplied by the server."""
     if not db.in_transaction:
         raise RuntimeError('Coursework commands require a write transaction.')
     if (not isinstance(action, str) or action not in COMMAND_FIELDS
             or type(expected_version) is not int or expected_version < 1
-            or not isinstance(request_key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', request_key)
             or not isinstance(data, dict)):
         fail(422, 'Некорректная команда.')
     required, optional = COMMAND_FIELDS[action]
@@ -201,26 +326,29 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
         own = recipient(db, actor, assignment_id)
     else:
         # Commands operate on the offering as a whole.
-        teaching_access(db, actor, now, assignment['offering_id'])
+        flow = teaching_access(db, actor, now, assignment['offering_id'])
         if action == 'copy':
             teaching_access(db, actor, now, data['target_offering_id'])
         elif action in ('record_in_person', 'review'):
             own = recipient(db, actor, assignment_id, data['course_id'])
     if own is not None and assignment['status'] != 'published':
         fail(404)
-    payload = json.dumps([assignment_id, action, expected_version, data], sort_keys=True)
-    fingerprint = hashlib.sha256(payload.encode()).hexdigest()
-    receipt = db.execute('SELECT fingerprint,result FROM coursework_receipts WHERE actor_id=? AND request_key=?',
-                         (actor['id'], request_key)).fetchone()
-    if receipt:
-        if receipt['fingerprint'] != fingerprint:
-            fail(409, 'Ключ уже использован для другой команды.')
-        return json.loads(receipt['result'])
+    fingerprint, previous = receipt_for(db, actor, request_key, [assignment_id, action, expected_version, data])
+    if previous is not None:
+        return previous
     if (own if own is not None else assignment)['version'] != expected_version:
         fail(409, 'Версия задания изменилась.')
 
     result = {'assignment_id': assignment_id, 'version': expected_version + int(action != 'copy')}
-    if action == 'publish':
+    if action == 'edit_draft':
+        if assignment['status'] != 'draft':
+            fail(409, 'Изменить можно только черновик.')
+        if not data:
+            fail(422, 'Укажите поля для изменения.')
+        fields = draft_fields(flow, now, **{key: data.get(key, assignment[key]) for key in DRAFT_FIELDS})
+        db.execute("""UPDATE coursework_assignments SET kind=?,title=?,description=?,due_at=?,mode=?
+            WHERE id=?""", (*fields, assignment_id))
+    elif action == 'publish':
         publish(db, assignment, now, data)
     elif action == 'copy':
         if data['target_offering_id'] == assignment['offering_id']:
@@ -231,7 +359,7 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
     else:
         if action == 'submit_text':
             response = data['response']
-            if not isinstance(response, str) or not 1 <= len(response.strip()) <= 4000:
+            if not isinstance(response, str) or '\0' in response or not 1 <= len(response.strip()) <= 4000:
                 fail(422, 'Укажите текст работы.')
             result.update(add_attempt(db, actor, now, assignment, own, 'text', response.strip()))
         else:
@@ -242,10 +370,9 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
     if own is not None:
         db.execute('UPDATE coursework_recipients SET version=? WHERE assignment_id=? AND course_id=?',
                    (result['version'], assignment_id, own['course_id']))
-    elif action == 'publish':
+    elif action in ('publish', 'edit_draft'):
         db.execute('UPDATE coursework_assignments SET version=? WHERE id=?', (result['version'], assignment_id))
     if actor['role'] == 'staff':
         audit(db, actor, 'coursework.' + action, 'coursework_assignment', assignment_id, result['version'], now)
-    db.execute('INSERT INTO coursework_receipts VALUES (?,?,?,?)',
-               (actor['id'], request_key, fingerprint, json.dumps(result)))
+    save_receipt(db, actor, request_key, fingerprint, result)
     return result

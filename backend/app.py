@@ -12,6 +12,7 @@ from .academics.attestation_routes import install_attestations
 from .requests.routes import install_requests
 from .deanery.routes import install_deanery
 from .brs.routes import install_brs
+from .coursework_routes import install_coursework
 
 ASSETS = {
     "/js/attestations.js": ("js/attestations.js", "text/javascript"),
@@ -52,6 +53,7 @@ def create_app(settings: Settings | None = None):
     install_requests(application,settings)
     install_deanery(application,settings)
     install_brs(application,settings)
+    install_coursework(application,settings)
     readiness = Readiness(settings)
 
     @application.get("/api/health")
