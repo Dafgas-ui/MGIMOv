@@ -269,7 +269,7 @@ class RequestTests(unittest.TestCase):
             for sql in (ROOT/'backend/migrations').glob('000[1-4]_*.sql'):shutil.copyfile(sql,definitions/sql.name)
             path=root/'upgrade.sqlite3';update(path,create=True,directory=definitions)
             with connection(Settings(path),write=True) as db:db.execute("INSERT INTO app_metadata VALUES ('v5-preserved','yes')")
-            update(path,backup=root/'backup.sqlite3');self.assertEqual(status(path)['applied'][-1],'0014_legacy_attempt_history')
+            update(path,backup=root/'backup.sqlite3');self.assertEqual(status(path)['applied'][-1],'0019_coursework_parent_guards')
             with connection(Settings(path)) as db:
                 self.assertEqual(db.execute("SELECT value FROM app_metadata WHERE key='v5-preserved'").fetchone()[0],'yes')
                 self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])

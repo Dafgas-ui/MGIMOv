@@ -179,6 +179,10 @@ def change_result(db, actor, now, offering, enrollment, event_code, attempt, dat
         fail(409, "Версия результата изменилась.")
 
     if command == "publish":
+        if db.execute("""SELECT 1 FROM coursework_brs_reservations
+            WHERE (offering_id,course_id,plan_id,event_code)=(?,?,?,?) LIMIT 1""",
+                      (offering, *key)).fetchone():
+            fail(409, "Публикация недоступна: мероприятие связано с учебной работой.")
         check_next(event, attempts, attempt)
         check_submission(db, enrollment, key, attempt, event, now)
         draft = draft_for(db, enrollment, key, attempt)

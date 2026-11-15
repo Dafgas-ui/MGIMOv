@@ -24,6 +24,401 @@ STAFF = "/api/v1/staff/brs"
 
 
 class BRSFoundationTests(unittest.TestCase):
+    def test_coursework_parent_guards_with_foreign_keys_on_and_off(self):
+        from backend.coursework import create_draft, execute, student_work
+
+        enrollment, path, _ = self.enroll_alice()
+        offering, course = path.split('/')[-2], enrollment['course_id']
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(offering).status_code, 201)
+        teacher = dict(id='teacher', role='staff')
+        student = dict(id='alice', role='student')
+        for foreign_keys in (0, 1):
+            for recursive in (0, 1):
+                with self.subTest(foreign_keys=foreign_keys, recursive_triggers=recursive), closing(
+                        sqlite3.connect(self.settings.database)) as db:
+                    db.row_factory = sqlite3.Row
+                    db.execute(f'PRAGMA foreign_keys={foreign_keys}')
+                    db.execute(f'PRAGMA recursive_triggers={recursive}')
+                    db.execute('BEGIN IMMEDIATE')
+
+                    def draft():
+                        return create_draft(db, teacher, self.now, offering, kind='lab', title='Lab',
+                                            description='Synthetic task', due_at=self.now+10, mode='both')
+
+                    def command(key, actor, action, version, data):
+                        return execute(db, actor, self.now, key, action, expected_version=version,
+                                       request_key=secrets.token_hex(16), data=data)
+
+                    work, published_empty, linked_draft, safe_draft = (draft() for _ in range(4))
+                    command(work, teacher, 'publish', 1, {})
+                    command(published_empty, teacher, 'publish', 1, {})
+                    db.execute('DELETE FROM coursework_recipients WHERE assignment_id=?',
+                               (published_empty,))
+                    db.execute("""UPDATE coursework_assignments SET grading_mode='brs',event_code='e'
+                        WHERE id=?""", (linked_draft,))
+                    db.execute('INSERT INTO coursework_recipients VALUES (?,?,?,1)',
+                               (linked_draft, course, enrollment['id']))
+                    self.assertEqual(command(work, student, 'submit_text', 1,
+                                             {'response':'Answer'})['attempt_no'], 1)
+                    review = dict(course_id=course, attempt_no=1, decision='reviewed', comment='Checked')
+                    command(work, teacher, 'review', 2, review)
+                    before = student_work(db, student, work)
+
+                    for sql, parameters in (
+                        ('DELETE FROM coursework_recipients WHERE assignment_id=?', (work,)),
+                        ('DELETE FROM coursework_assignments WHERE id=?', (published_empty,)),
+                        ('DELETE FROM coursework_assignments WHERE id=?', (work,)),
+                        ('DELETE FROM coursework_assignments WHERE id=?', (linked_draft,)),
+                        ("UPDATE coursework_assignments SET id='changed' WHERE id=?", (work,)),
+                        ('UPDATE coursework_recipients SET assignment_id=? WHERE assignment_id=?',
+                         (safe_draft, work)),
+                        ("UPDATE coursework_recipients SET course_id='changed' WHERE assignment_id=?", (work,)),
+                        ("UPDATE coursework_recipients SET enrollment_id='changed' WHERE assignment_id=?", (work,)),
+                        ('INSERT OR REPLACE INTO coursework_recipients SELECT * FROM coursework_recipients'
+                         ' WHERE assignment_id=?', (work,)),
+                        ('INSERT OR REPLACE INTO coursework_assignments SELECT * FROM coursework_assignments'
+                         ' WHERE id=?', (work,)),
+                        ("""INSERT OR REPLACE INTO coursework_assignments
+                            SELECT 'replacement',offering_id,created_by,kind,title,description,due_at,
+                            mode,created_at,status,version,event_code,grading_mode,max_points
+                            FROM coursework_assignments WHERE id=?""", (linked_draft,)),
+                        ("""UPDATE OR REPLACE coursework_assignments SET grading_mode='brs',event_code='e'
+                            WHERE id=?""", (safe_draft,)),
+                    ):
+                        with self.assertRaises(sqlite3.IntegrityError, msg=sql):
+                            db.execute(sql, parameters)
+
+                    self.assertEqual(student_work(db, student, work), before)
+                    self.assertEqual(command(work, teacher, 'review', 3,
+                                             dict(review, decision='retry_allowed',
+                                                  reason='Allow resubmission'))['review_revision'], 2)
+                    self.assertEqual(student_work(db, student, work)['attempts'], before['attempts'])
+                    self.assertEqual(command(work, student, 'submit_text', 4,
+                                             {'response':'Revised answer'})['attempt_no'], 2)
+                    self.assertEqual(db.execute('DELETE FROM coursework_assignments WHERE id=?',
+                                                (safe_draft,)).rowcount, 1)
+                    self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+                    db.rollback()
+
+    def test_coursework_independent_grading_and_append_only_history(self):
+        from backend.auth.service import AuthError
+        from backend.coursework import create_draft, execute, student_work
+
+        enrollment, path, _ = self.enroll_alice()
+        offering = path.split('/')[-2]
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(offering).status_code, 201)
+        course = enrollment['course_id']
+        teacher = dict(id='teacher', role='staff')
+        student = dict(id='alice', role='student')
+        with connection(self.settings, write=True) as db:
+            work = create_draft(db, teacher, self.now, offering, kind='lab', title='Lab',
+                                description='Synthetic task', due_at=self.now+10, mode='both')
+
+        def command(actor, action, version, data):
+            with connection(self.settings, write=True) as db:
+                return execute(db, actor, self.now, work, action, expected_version=version,
+                               request_key=secrets.token_hex(16), data=data)
+
+        with self.assertRaises(AuthError):
+            command(teacher, 'publish', 1, {'grading_mode': 'independent', 'max_points': True})
+        command(teacher, 'publish', 1, {'grading_mode': 'independent', 'max_points': 10})
+        command(student, 'submit_text', 1, {'response': 'Answer'})
+        review = dict(course_id=course, attempt_no=1, decision='reviewed', comment='Checked')
+        for bad in (-1, 11, True):
+            with self.assertRaises(AuthError) as error:
+                command(teacher, 'review', 2, dict(review, points=bad))
+            self.assertEqual(error.exception.status, 422)
+        command(teacher, 'review', 2, dict(review, points=0))
+        with self.assertRaises(AuthError):
+            command(teacher, 'review', 3, dict(review, points=7))
+        command(teacher, 'review', 3, dict(review, points=7, reason='Corrected total'))
+        for mode in ('OFF', 'ON'):
+            with closing(sqlite3.connect(self.settings.database)) as db:
+                db.execute('PRAGMA foreign_keys=ON')
+                db.execute('PRAGMA recursive_triggers=' + mode)
+                for sql in (
+                    'UPDATE coursework_reviews SET points=1',
+                    'DELETE FROM coursework_reviews',
+                    'INSERT OR REPLACE INTO coursework_reviews SELECT * FROM coursework_reviews WHERE revision=1',
+                    'DELETE FROM coursework_attempts',
+                    'UPDATE coursework_attempts SET response=\'Rewritten\'',
+                    'INSERT OR REPLACE INTO coursework_attempts SELECT * FROM coursework_attempts',
+                    'INSERT OR REPLACE INTO coursework_recipients SELECT * FROM coursework_recipients',
+                    'UPDATE coursework_assignments SET max_points=1',
+                    'INSERT OR REPLACE INTO coursework_assignments SELECT * FROM coursework_assignments',
+                ):
+                    with self.assertRaises(sqlite3.IntegrityError):
+                        db.execute(sql)
+                for comment, timestamp, reason in (
+                    ('', self.now, 'Valid reason'), (' \t\n\u00a0', self.now, 'Valid reason'),
+                    ('x'*2001, self.now, 'Valid reason'), ('Checked', 0, 'Valid reason'),
+                    ('Checked', 1.5, 'Valid reason'), ('Checked', self.now, None),
+                    ('Checked', self.now, '\t\u00a0\n'),
+                ):
+                    with self.assertRaisesRegex(sqlite3.IntegrityError, 'Invalid coursework review'):
+                        db.execute("""INSERT INTO coursework_reviews
+                            VALUES (?,?,1,3,'reviewed',1,?,'teacher',?,?)""",
+                                   (work, course, comment, timestamp, reason))
+        with connection(self.settings) as db:
+            item = student_work(db, student, work)
+            self.assertEqual((item['grading_mode'], item['max_points']), ('independent', 10))
+            self.assertEqual([(r['points'], r['reason']) for r in item['reviews']],
+                             [(0, None), (7, 'Corrected total')])
+            self.assertEqual(db.execute('SELECT count(*) FROM brs_attempt_versions').fetchone()[0], 0)
+        with connection(self.settings, write=True) as db:
+            work = create_draft(db, teacher, self.now, offering, kind='lab', title='No score',
+                                description='Synthetic task', due_at=self.now+10, mode='both')
+        command(teacher, 'publish', 1, {'grading_mode': 'ungraded'})
+        command(student, 'submit_text', 1, {'response': 'Answer'})
+        with self.assertRaises(AuthError):
+            command(teacher, 'review', 2, dict(review, points=1))
+        command(teacher, 'review', 2, review)
+
+    def test_coursework_conflict_is_limited_to_published_results_in_recipient_flow(self):
+        from backend.coursework import PublishedBRSConflict, create_draft, execute
+
+        plan = self.locked()
+        old, new = self.flow(plan), self.flow(plan, 'b')
+        enrollment = self.post(f'{ADMIN}/offerings/{old}/enrollments',
+                               {'student_id': 'alice', 'starts_on': '2027-02-01'}).json()
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(old).status_code, 201)
+        teacher = dict(id='teacher', role='staff')
+        with connection(self.settings, write=True) as db:
+            db.execute("UPDATE lessons SET teacher_id='t' WHERE id='lb'")
+            db.execute("INSERT INTO brs_event_results VALUES ('result',?,?,'e')",
+                       (enrollment['course_id'], plan))
+            db.execute("INSERT INTO brs_attempt_versions VALUES ('version','result',?,1,1,1,0,'teacher',?,NULL)",
+                       (enrollment['id'], self.now))
+            work = create_draft(db, teacher, self.now, old, kind='lab', title='Lab',
+                                description='Synthetic task', due_at=self.now+10, mode='both')
+        with connection(self.settings, write=True) as db:
+            with self.assertRaises(PublishedBRSConflict) as conflict:
+                execute(db, teacher, self.now, work, 'publish', expected_version=1,
+                        request_key='conflict-example', data={'event_code': 'e'})
+            self.assertEqual(conflict.exception.code, 'coursework_brs_result_already_published')
+            self.assertEqual(tuple(db.execute('SELECT status,version FROM coursework_assignments').fetchone()),
+                             ('draft', 1))
+            for table in ('coursework_recipients', 'coursework_receipts'):
+                self.assertEqual(db.execute(f'SELECT count(*) FROM {table}').fetchone()[0], 0)
+            db.execute("INSERT INTO coursework_recipients VALUES (?,?,?,1)",
+                       (work, enrollment['course_id'], enrollment['id']))
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'BRS result already published'):
+                db.execute("""UPDATE coursework_assignments SET status='published',
+                    grading_mode='brs', event_code='e' WHERE id=?""", (work,))
+            db.execute("DELETE FROM coursework_recipients WHERE assignment_id=?", (work,))
+            db.execute("""UPDATE coursework_assignments SET status='published',
+                grading_mode='brs', event_code='e' WHERE id=?""", (work,))
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'BRS result already published'):
+                db.execute("INSERT INTO coursework_recipients VALUES (?,?,?,1)",
+                           (work, enrollment['course_id'], enrollment['id']))
+        self.assertEqual(self.post(f"{ADMIN}/enrollments/{enrollment['id']}/transfer",
+                                  {'target_offering_id': new, 'starts_on': '2027-02-20',
+                                   'reason': 'Transfer'}).status_code, 201)
+        self.assertEqual(self.grant(new, lesson='lb').status_code, 201)
+        with connection(self.settings, write=True) as db:
+            target = create_draft(db, teacher, self.now, new, kind='lab', title='Lab',
+                                  description='New flow', due_at=self.now+10, mode='both')
+            execute(db, teacher, self.now, target, 'publish', expected_version=1,
+                    request_key='target-example-1', data={'event_code': 'e'})
+            self.assertEqual(db.execute('SELECT count(*) FROM coursework_recipients').fetchone()[0], 1)
+
+    def test_coursework_upgrade_populated_rc31_with_intermediate_draft_and_rollback(self):
+        from backend.coursework import create_draft
+        from backend.migrations.manager import MigrationError
+
+        root = self.enterContext(temporary())
+        migrations = root / 'migrations'
+        migrations.mkdir()
+        files = sorted(DIRECTORY.glob('*.sql'))
+        for file in files[:14]:
+            shutil.copyfile(file, migrations / file.name)
+        self.initialize(root, migrations)
+        enrollment, path, _ = self.enroll_alice()
+        offering = path.split('/')[-2]
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(offering).status_code, 201)
+        database = self.settings.database
+        for file in files[14:15]:
+            shutil.copyfile(file, migrations / file.name)
+        update(database, backup=root/'before15.sqlite3', directory=migrations)
+        with connection(self.settings, write=True) as db:
+            draft = create_draft(db, dict(id='teacher', role='staff'), self.now, offering,
+                                 kind='lab', title='Keep me', description='Synthetic task',
+                                 due_at=self.now+10, mode='online')
+        shutil.copyfile(files[15], migrations/files[15].name)
+        update(database, backup=root/'before16.sqlite3', directory=migrations)
+        with connection(self.settings, write=True) as db:
+            self.assertEqual(tuple(db.execute('SELECT title,status,version FROM coursework_assignments'
+                                              ' WHERE id=?', (draft,)).fetchone()), ('Keep me', 'draft', 1))
+            db.execute("""INSERT INTO coursework_assignments
+                (id,offering_id,created_by,kind,title,description,due_at,mode,created_at,status,version,event_code)
+                VALUES ('legacy',?,'teacher','lab','Legacy','Synthetic',?,'online',?,'published',2,'e')""",
+                       (offering, self.now+10, self.now))
+            db.execute("INSERT INTO coursework_recipients VALUES ('legacy',?,?,2)",
+                       (enrollment['course_id'], enrollment['id']))
+            db.execute("INSERT INTO coursework_attempts VALUES ('legacy',?,1,'text','Answer',?,'alice',0)",
+                       (enrollment['course_id'], self.now))
+            db.execute("INSERT INTO coursework_reviews VALUES ('legacy',?,1,1,'reviewed',0,'Checked','teacher',?)",
+                       (enrollment['course_id'], self.now))
+        shutil.copyfile(files[16], migrations/files[16].name)
+        self.assertEqual(update(database, backup=root/'before17.sqlite3', directory=migrations)['applied'][-1],
+                         files[16].stem)
+        with connection(self.settings, write=True) as db:
+            plan = db.execute('SELECT plan_id FROM brs_offerings WHERE id=?', (offering,)).fetchone()[0]
+            db.execute("INSERT INTO brs_event_results VALUES ('legacy-result',?,?,'e')",
+                       (enrollment['course_id'], plan))
+            db.execute("""INSERT INTO brs_attempt_versions
+                VALUES ('legacy-version','legacy-result',?,1,1,1,0,'teacher',?,NULL)""",
+                       (enrollment['id'], self.now))
+        shutil.copyfile(files[17], migrations/files[17].name)
+        self.assertEqual(update(database, backup=root/'before18.sqlite3', directory=migrations)['applied'][-1],
+                         files[17].stem)
+        broken = migrations / files[18].name
+        broken.write_text(files[18].read_text(encoding='utf-8') + '\nINSERT INTO missing_table VALUES (1);',
+                          encoding='utf-8')
+        with self.assertRaises(MigrationError):
+            update(database, backup=root/'before-broken.sqlite3', directory=migrations)
+        self.assertEqual(status(database, directory=migrations)['pending'], [files[18].stem])
+        self.assertEqual(update(database, backup=root/'before19.sqlite3')['applied'][-1], files[18].stem)
+        self.assertEqual(update(database)['pending'], [])
+        with connection(self.settings) as db:
+            self.assertEqual(tuple(db.execute('''SELECT title,status,version,grading_mode FROM coursework_assignments
+                                                 WHERE id=?''', (draft,)).fetchone()), ('Keep me', 'draft', 1, 'ungraded'))
+            self.assertIsNotNone(db.execute('SELECT id FROM brs_enrollments WHERE id=?', (enrollment['id'],)).fetchone())
+            self.assertEqual(tuple(db.execute("SELECT grading_mode,event_code FROM coursework_assignments"
+                                              " WHERE id='legacy'").fetchone()), ('brs', 'e'))
+            self.assertEqual(tuple(db.execute("SELECT revision,points,reason FROM coursework_reviews"
+                                              " WHERE assignment_id='legacy'").fetchone()), (1, 0, None))
+            self.assertEqual(tuple(db.execute("""SELECT n.enrollment_id,t.response FROM coursework_recipients n
+                JOIN coursework_attempts t USING (assignment_id,course_id)
+                WHERE n.assignment_id='legacy'""").fetchone()), (enrollment['id'], 'Answer'))
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+            self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+        correction = self.post(f"{STAFF}/offerings/{offering}/enrollments/{enrollment['id']}/events/e/attempts/1/correct",
+                               {'request_key':'legacy-correct','expected_result_version':1,
+                                'points':1,'reason':'Correct existing result'}, 'teacher')
+        self.assertEqual(correction.status_code, 200, correction.text)
+        with connection(self.settings) as db:
+            history = db.execute("""SELECT revision_no,points FROM brs_attempt_versions
+                WHERE result_id='legacy-result' ORDER BY revision_no""").fetchall()
+            self.assertEqual([tuple(row) for row in history], [(1, 0), (2, 1)])
+
+    def test_coursework_lifecycle_and_concurrent_replay(self):
+        from backend.auth.service import AuthError
+        from backend.coursework import create_draft, execute, student_work
+
+        plan = self.locked()
+        old, new = self.flow(plan), self.flow(plan, 'b')
+        enrollment = self.post(f'{ADMIN}/offerings/{old}/enrollments',
+                               {'student_id': 'alice', 'starts_on': '2027-02-01'}).json()
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(old).status_code, 201)
+        teacher = dict(id='teacher', role='staff')
+        student = dict(id='alice', role='student')
+        now = self.now
+        with connection(self.settings, write=True) as db:
+            work = create_draft(db, teacher, now, old, kind='lab', title='Lab',
+                                description='Synthetic coursework', due_at=now+10, mode='both')
+
+        def command(actor, action, version, key, data, *, at=now):
+            with connection(self.settings, write=True) as db:
+                return execute(db, actor, at, work, action, expected_version=version,
+                               request_key=key.ljust(16, '_'), data=data)
+
+        command(teacher, 'publish', 1, 'publish', {'event_code': 'e'})
+        with self.assertRaises(AuthError):
+            command(teacher, 'copy', 2, 'forbidden-copy', {'target_offering_id': new})
+        with connection(self.settings, write=True) as db:
+            db.execute("UPDATE lessons SET teacher_id='t' WHERE id='lb'")
+        self.assertEqual(self.grant(new, lesson='lb').status_code, 201)
+        copy_result = command(teacher, 'copy', 2, 'copy', {'target_offering_id': new})
+        self.assertEqual(command(teacher, 'copy', 2, 'copy', {'target_offering_id': new}), copy_result)
+        with connection(self.settings) as db:
+            copied = db.execute('SELECT * FROM coursework_assignments WHERE id=?',
+                                (copy_result['copy_id'],)).fetchone()
+            self.assertEqual((copied['status'], copied['event_code'], copied['offering_id']),
+                             ('draft', None, new))
+            self.assertEqual(db.execute('SELECT count(*) FROM coursework_recipients WHERE assignment_id=?',
+                                        (copied['id'],)).fetchone()[0], 0)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: command(student, 'submit_text', 1, 'submit',
+                                                      {'response': 'Answer'}, at=now+11), range(2)))
+        self.assertEqual(results[0], results[1])
+        self.assertTrue(results[0]['late'])
+        with self.assertRaises(AuthError) as reused:
+            command(student, 'submit_text', 1, 'submit', {'response': 'Different payload'})
+        self.assertEqual(reused.exception.status, 409)
+        with self.assertRaises(AuthError) as stale:
+            command(student, 'submit_text', 1, 'stale', {'response': 'Stale version'})
+        self.assertEqual(stale.exception.status, 409)
+        course = enrollment['course_id']
+        with self.assertRaises(AuthError) as conflict:
+            command(student, 'submit_text', 2, 'different', {'response': 'Second'})
+        self.assertEqual(conflict.exception.status, 409)
+        command(teacher, 'review', 2, 'return', dict(course_id=course, attempt_no=1,
+                                                    decision='returned', comment='Revise'))
+        command(teacher, 'record_in_person', 3, 'in-person', {'course_id': course})
+        command(teacher, 'review', 4, 'review', dict(course_id=course, attempt_no=2,
+                                                    decision='reviewed', points=80, comment='Accepted'))
+        self.assertEqual(self.count('brs_attempt_versions'), 0)
+        with self.assertRaises(AuthError) as expired:
+            command(teacher, 'review', 5, 'expired', dict(course_id=course, attempt_no=2,
+                    decision='retry_allowed', comment='Retry'), at=now+60)
+        self.assertEqual(expired.exception.status, 404)
+        path = f"{ADMIN}/enrollments/{enrollment['id']}/transfer"
+        self.assertEqual(self.post(path, {'target_offering_id': new, 'starts_on': '2027-02-20',
+                                          'reason': 'Transfer'}).status_code, 201)
+        with connection(self.settings) as db:
+            item = student_work(db, student, work)
+            self.assertEqual([p['method'] for p in item['attempts']], ['text', 'in_person'])
+            self.assertEqual([r['decision'] for r in item['reviews']], ['returned', 'reviewed'])
+            with self.assertRaises(AuthError):
+                student_work(db, dict(id='bobby', role='student'), work)
+        with self.assertRaises(AuthError):
+            command(student, 'submit_text', 5, 'after-transfer', {'response': 'Old flow'})
+        copied_id = copy_result['copy_id']
+        with connection(self.settings, write=True) as db:
+            execute(db, teacher, now, copied_id, 'publish', expected_version=1,
+                    request_key='publish-new-flow', data={'event_code': 'e'})
+            self.assertEqual(student_work(db, student, copied_id)['attempts'], [])
+
+    def test_coursework_deadline_stays_within_semester(self):
+        from backend.auth.service import AuthError
+        from backend.coursework import create_draft
+
+        flow = self.flow(self.locked())
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(flow).status_code, 201)
+        next_term = int(datetime(2027, 7, 1, 12, tzinfo=MOSCOW).timestamp())
+        with connection(self.settings, write=True) as db:
+            with self.assertRaises(AuthError) as outside:
+                create_draft(db, dict(id='teacher', role='staff'), self.now, flow, kind='test',
+                             title='Exam practice', description='Synthetic', due_at=next_term, mode='both')
+            self.assertEqual(outside.exception.status, 422)
+            self.assertEqual(db.execute('SELECT count(*) FROM coursework_assignments').fetchone()[0], 0)
+
+    def test_coursework_draft_requires_live_offering_assignment(self):
+        from backend.auth.service import AuthError
+        from backend.coursework import create_draft
+
+        flow = self.flow(self.locked())
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(flow).status_code, 201)
+        fields = dict(kind='lab', title='Lab', description='Synthetic task',
+                      due_at=self.now + 86400, mode='in_person')
+        with connection(self.settings, write=True) as db:
+            for actor, when in ((dict(id='outside', role='staff'), self.now),
+                                (dict(id='alice', role='student'), self.now),
+                                (dict(id='teacher', role='staff'), self.now + 60)):
+                with self.assertRaises(AuthError):
+                    create_draft(db, actor, when, flow, **fields)
+            key = create_draft(db, dict(id='teacher', role='staff'), self.now, flow, **fields)
+            self.assertEqual(db.execute('SELECT id FROM coursework_assignments').fetchone()[0], key)
+            self.assertEqual(db.execute("SELECT count(*) FROM staff_audit WHERE action='coursework.draft.create'").fetchone()[0], 1)
+
     def setUp(self):
         self.initialize(self.enterContext(temporary()))
 
@@ -336,7 +731,7 @@ class BRSFoundationTests(unittest.TestCase):
             with connection(Settings(database),write=True) as db:
                 db.execute("INSERT INTO faculties VALUES ('prior','Prior')")
             backup = root/"backup.sqlite3"
-            self.assertEqual(update(database,backup=backup)["applied"][-1],"0014_legacy_attempt_history")
+            self.assertEqual(update(database,backup=backup)["applied"][-1],"0019_coursework_parent_guards")
             self.assertEqual(update(database)["pending"],[])
             for target in (database,backup):
                 with connection(Settings(target)) as db:
@@ -417,7 +812,7 @@ class BRSFoundationTests(unittest.TestCase):
 
         before = snapshot(self.settings)
         backup = root / "v8-backup.sqlite3"
-        self.assertEqual(update(self.settings.database, backup=backup)["applied"][-1], "0014_legacy_attempt_history")
+        self.assertEqual(update(self.settings.database, backup=backup)["applied"][-1], "0019_coursework_parent_guards")
         self.assertEqual(update(self.settings.database)["pending"], [])
         self.assertEqual(status(backup, directory=definitions)["applied"][-1], "0008_brs_course_identity")
         self.assertEqual(snapshot(Settings(backup)), before)

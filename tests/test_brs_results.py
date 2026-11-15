@@ -67,6 +67,62 @@ class BRSResultsTests(unittest.TestCase):
     def first_event(self):
         return self.results()["plans"][0]["events"][0]
 
+    def test_coursework_blocks_brs_publication_and_direct_insert_in_its_scope(self):
+        from backend.coursework import create_draft, execute
+
+        self.setup_course()
+        case = self.case
+        teacher = dict(id='teacher', role='staff')
+        self.assertEqual(self.draft(12).status_code, 200)
+        with connection(case.settings, write=True) as db:
+            assignment = create_draft(db, teacher, case.now, self.flow, kind='lab', title='Lab',
+                                      description='Synthetic task', due_at=case.now+10, mode='both')
+            execute(db, teacher, case.now, assignment, 'publish', expected_version=1,
+                    request_key='coursework-first', data={'event_code': 'e'})
+        before = self.results()
+        response = self.publish()
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(set(response.json()), {'detail'})
+        self.assertEqual(self.results(), before)
+        for table in ('brs_event_results', 'brs_attempt_versions', 'brs_operation_receipts'):
+            self.assertEqual(case.count(table), 0)
+        self.assertEqual(case.count('brs_attempt_drafts'), 1)
+        with connection(case.settings, write=True) as db:
+            db.execute('SAVEPOINT direct_probe')
+            db.execute("INSERT INTO brs_event_results VALUES ('probe',?,?,'e')", (self.course, self.plan))
+            for recursive in ('OFF', 'ON'):
+                db.execute('PRAGMA recursive_triggers=' + recursive)
+                with self.assertRaisesRegex(sqlite3.IntegrityError, 'Coursework owns'):
+                    db.execute("""INSERT INTO brs_attempt_versions
+                        VALUES ('probe-version','probe',?,1,1,1,12,'teacher',?,NULL)""",
+                               (self.enrollment, case.now))
+            db.execute('ROLLBACK TO direct_probe')
+            db.execute('RELEASE direct_probe')
+        target = case.flow(self.plan, 'b')
+        with connection(case.settings, write=True) as db:
+            db.execute("UPDATE lessons SET teacher_id='t' WHERE id='lb'")
+        self.assertEqual(case.grant(target, lesson='lb').status_code, 201)
+        moved = self.transfer(target)
+        self.assertEqual(moved.status_code, 201, moved.text)
+        enrollment = moved.json()['id']
+        path = f"{STAFF}/offerings/{target}/enrollments/{enrollment}/events/e"
+        self.assertEqual(self.draft(12, path=path).status_code, 200)
+        published = self.command('/attempts/1/publish',
+                                 {'request_key':'other-flow','expected_draft_version':1,
+                                  'expected_result_version':0}, path=path)
+        self.assertEqual(published.status_code, 200, published.text)
+        old_plan = case.locked(case.plan('math-old'))
+        old_flow = case.flow(old_plan)
+        prior = case.post(f'{ADMIN}/offerings/{old_flow}/enrollments',
+                          {'student_id':'alice','starts_on':'2026-09-01'})
+        self.assertEqual(prior.status_code, 201, prior.text)
+        with connection(case.settings, write=True) as db:
+            db.execute("INSERT INTO brs_event_results VALUES ('prior',?,?,'e')",
+                       (prior.json()['course_id'], old_plan))
+            db.execute("""INSERT INTO brs_attempt_versions
+                VALUES ('prior-version','prior',?,1,1,1,12,'teacher',?,NULL)""",
+                       (prior.json()['id'], case.now))
+
     def test_draft_invisible_publish_zero_and_correction_history(self):
         self.setup_course()
         legacy_before = self.case.clients["alice"].get("/api/v1/me/gradebook").json()
@@ -295,7 +351,7 @@ class BRSResultsTests(unittest.TestCase):
                                      grants,"staff_audit","assessment_attempts")}
         before = snapshot(self.case.settings)
         backup = self.root/"before-0010.sqlite3"
-        self.assertEqual(update(self.case.settings.database,backup=backup)["applied"][-1],"0014_legacy_attempt_history")
+        self.assertEqual(update(self.case.settings.database,backup=backup)["applied"][-1],"0019_coursework_parent_guards")
         self.assertEqual(update(self.case.settings.database)["pending"],[])
         self.assertEqual(status(backup,directory=definitions)["applied"][-1],"0009_brs_course_insert_guard")
         self.assertEqual(snapshot(type(self.case.settings)(backup)),before)
@@ -341,7 +397,7 @@ class BRSResultsTests(unittest.TestCase):
         database = self.case.settings.database
         backup = self.root / "before-0011.sqlite3"
         self.assertEqual(self.case.clients["alice"].get(self.public).status_code, 503)
-        self.assertEqual(update(database,backup=backup)["applied"][-1],"0014_legacy_attempt_history")
+        self.assertEqual(update(database,backup=backup)["applied"][-1],"0019_coursework_parent_guards")
         self.assertEqual(update(database)["pending"],[])
         with connection(self.case.settings,write=True) as db:
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
