@@ -157,6 +157,7 @@ def verified_backup(database, destination):
 def update(database, *, backup=None, baseline=False, create=False,
            directory=DIRECTORY, timeout=5):
     migrations = definitions(directory)
+    identifier = None
     database = Path(database).resolve()
     if create:
         if baseline:
@@ -208,4 +209,7 @@ def update(database, *, backup=None, baseline=False, create=False,
             ) from None
         if "locked" in str(error).lower() or "busy" in str(error).lower():
             raise MigrationError("База занята другим процессом. Повторите операцию позже.") from None
-        raise MigrationError("Ошибка SQL; изменения схемы и истории отменены.") from None
+        code = getattr(error, "sqlite_errorname", "SQLITE_ERROR")
+        raise MigrationError(
+            f"Ошибка SQL ({identifier or 'preflight'}, {code}); изменения схемы и истории отменены."
+        ) from error

@@ -28,6 +28,22 @@ def temporary():
         yield Path(name)
 
 class FoundationTests(unittest.TestCase):
+    def test_migration_sql_error_identifies_migration_and_preserves_cause(self):
+        with temporary() as root:
+            migrations = root / 'migrations'
+            migrations.mkdir()
+            (migrations / '0001_initial.sql').write_text(
+                'CREATE TABLE audit_fixture (id TEXT);', encoding='utf8')
+            (migrations / '0002_fixture.sql').write_text(
+                "ALTER TABLE audit_fixture ADD COLUMN status TEXT DEFAULT 'draft' CHECK(status='draft');",
+                encoding='utf8')
+            database = root / 'initial.sqlite3'
+            with self.assertRaisesRegex(MigrationError, '0002_fixture, SQLITE_AUTH') as error:
+                update(database, create=True, directory=migrations)
+            self.assertEqual(error.exception.__cause__.sqlite_errorname, 'SQLITE_AUTH')
+            with closing(sqlite3.connect(database)) as db:
+                self.assertEqual(db.execute("SELECT name FROM sqlite_master").fetchall(), [])
+
     def test_configuration_is_project_local_and_ignores_legacy_environment(self):
         with patch.dict(os.environ, {"DASHBOARD_DB_PATH": "unused.sqlite3"}, clear=True):
             self.assertEqual(Settings.from_environment().database, ROOT / "data/deanery.sqlite3")
