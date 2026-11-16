@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import sqlite3
 import shutil
 import hashlib
+import os
 from collections import namedtuple
 from contextlib import closing
 from pathlib import Path
@@ -12,58 +13,92 @@ import sysconfig
 import unittest
 from unittest.mock import patch
 
-from backend.commands.backup_database import backup_database, backup_lock
+from backend.commands.backup_database import backup_database, backup_lock, make_private_directory
+from backend.commands.contest_demo_permissions import (
+    PrivateDemoDirectory, check_windows_chain, create_windows_directory, windows_user_sid,
+)
+from backend.config import ROOT
 from backend.migrations.manager import status, update
-from tests.test_foundation import temporary
+
+
+def private_backup_test_directory(test):
+    scratch = ROOT / '.tmp'
+    if os.name == 'nt':
+        sid = windows_user_sid()
+        try:
+            check_windows_chain(ROOT, sid)
+            if not os.path.lexists(scratch):
+                create_windows_directory(scratch, sid)
+            check_windows_chain(scratch, sid)
+        except PermissionError:
+            test.skipTest('Backup tests require a trusted private Windows checkout.')
+    else:
+        scratch.mkdir(exist_ok=True)
+    workspace = PrivateDemoDirectory(scratch)
+    test.addCleanup(shutil.rmtree, workspace.path)
+    return workspace.path
 
 
 class BackupDatabaseTest(unittest.TestCase):
     def setUp(self):
-        self.root = self.enterContext(temporary())
+        self.root = private_backup_test_directory(self)
         self.database = self.root / 'source.sqlite3'
         update(self.database, create=True)
         self.backups = self.root / 'backups'
-        self.backups.mkdir(mode=0o700)
+        make_private_directory(self.backups)
 
-    def snapshot(self, quota=10_000_000):
+    def snapshot(self, quota=10_000_000, *, day=14):
         return backup_database(self.database, self.backups,
-                               now=datetime(2026, 11, 14, tzinfo=timezone.utc),
-                               keep_days=7, max_bytes=quota)
+                               now=datetime(2026, 11, day, tzinfo=timezone.utc),
+                               max_bytes=quota)
 
     def test_verified_snapshot_and_rotation(self):
-        expired = self.backups / 'daily-2026-11-07.sqlite3'
-        retained = self.backups / 'daily-2026-11-08.sqlite3'
         manual = self.backups / 'pre-release.sqlite3'
-        for path in (expired, retained, manual):
-            path.write_bytes(b'fixture')
-        shutil.copyfile(self.database, expired)
-        unrelated = self.backups / 'daily-2026-11-06.sqlite3'
-        unrelated.write_bytes(b'unrelated')
-        expired.with_suffix('.sha256').write_bytes(
-            (hashlib.sha256(expired.read_bytes()).hexdigest() + '\n').encode()
-        )
+        manual.write_bytes(b'fixture')
         source = self.database.read_bytes()
-        snapshot = self.snapshot()
+        days = (1, 2, 4, 6, 8, 11, 20, 28)
+        snapshots = [self.snapshot(day=day) for day in days[:-1]]
+        self.assertTrue(all(path.is_file() for path in snapshots))
+        snapshot = self.snapshot(day=days[-1])
         self.assertEqual(status(snapshot)['pending'], [])
         restored = self.root / 'restored.sqlite3'
         shutil.copyfile(snapshot, restored)
         self.assertEqual(status(restored)['applied'], status(self.database)['applied'])
         self.assertEqual(self.database.read_bytes(), source)
-        self.assertFalse(expired.exists())
-        self.assertTrue(retained.exists())
+        self.assertFalse(snapshots[0].parent.exists())
+        self.assertTrue(all(path.is_file() for path in snapshots[1:]))
         self.assertTrue(manual.exists())
-        self.assertTrue(unrelated.exists())
-        with self.assertRaises(FileExistsError):
-            self.snapshot()
+        with patch('backend.commands.backup_database.verified_backup', side_effect=AssertionError):
+            self.assertEqual(self.snapshot(day=days[-1]), snapshot)
+
+    def test_corrupt_daily_bundle_does_not_displace_an_older_success(self):
+        verified = [self.snapshot(day=day) for day in (1, 2, 4, 6, 8, 11)]
+        broken = self.snapshot(day=12)
+        broken.write_bytes(b'bad database')
+        broken.with_suffix('.sha256').write_bytes((hashlib.sha256(broken.read_bytes()).hexdigest() + '\n').encode())
+        self.snapshot(day=14)
+        self.assertTrue(all(path.is_file() for path in verified))
+        self.assertEqual(broken.read_bytes(), b'bad database')
+
+    def test_invalid_same_day_receipt_fails_without_replacing_backup(self):
+        snapshot = self.snapshot()
+        original = snapshot.read_bytes()
+        receipt = snapshot.with_suffix('.sha256')
+        receipt.write_bytes(b'0' * 64 + b'\n')
+        with patch('backend.commands.backup_database.verified_backup', side_effect=AssertionError):
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                self.snapshot()
+        self.assertEqual(snapshot.read_bytes(), original)
+        self.assertEqual(receipt.read_bytes(), b'0' * 64 + b'\n')
 
     def test_failed_backup_preserves_previous_snapshots(self):
-        expired = self.backups / 'daily-2026-11-07.sqlite3'
-        expired.write_bytes(b'fixture')
+        previous = [self.snapshot(day=day) for day in (1, 2, 3, 4, 5, 6, 7)]
+        expected = {path: path.read_bytes() for path in previous}
         with patch('backend.commands.backup_database.verified_backup', side_effect=sqlite3.OperationalError):
             with self.assertRaises(sqlite3.OperationalError):
                 self.snapshot()
-        self.assertEqual({p.name for p in self.backups.iterdir()},
-                         {expired.name, '.mgimov-backup.lock', '.snapshot-pending'})
+        self.assertEqual({path: path.read_bytes() for path in previous}, expected)
+        self.assertFalse((self.backups / 'daily-2026-11-14').exists())
 
     def test_failed_receipt_recovers_verified_snapshot_on_retry(self):
         with patch('backend.commands.backup_database.write_receipt', side_effect=OSError):
@@ -116,6 +151,7 @@ class BackupDatabaseTest(unittest.TestCase):
     def test_verified_staging_is_recovered_after_rename_failure(self):
         from pathlib import Path
         original = Path.rename
+        previous = [self.snapshot(day=day) for day in (1, 2, 3, 4, 5, 6, 7)]
 
         def fail_publish(path, target):
             if path.name == '.snapshot-pending':
@@ -125,29 +161,31 @@ class BackupDatabaseTest(unittest.TestCase):
         with patch.object(Path, 'rename', fail_publish):
             with self.assertRaises(OSError):
                 self.snapshot()
+        self.assertTrue(all(path.is_file() for path in previous))
+        self.assertFalse((self.backups / 'daily-2026-11-14').exists())
         with patch('backend.commands.backup_database.verified_backup', side_effect=AssertionError):
             with self.assertLogs(level='WARNING'):
                 self.assertTrue(self.snapshot().is_file())
+        self.assertFalse(previous[0].exists())
+        self.assertTrue(all(path.is_file() for path in previous[1:]))
 
-    def test_legacy_snapshot_without_receipt_is_validated(self):
+    def test_legacy_snapshot_without_receipt_is_preserved(self):
         old = self.backups / 'daily-2026-11-14.sqlite3'
         shutil.copyfile(self.database, old)
-        with self.assertLogs(level='WARNING'):
-            self.assertEqual(self.snapshot(), old)
-        self.assertTrue(old.with_suffix('.sha256').is_file())
+        self.assertNotEqual(self.snapshot(), old)
+        self.assertEqual(old.read_bytes(), self.database.read_bytes())
+        self.assertFalse(old.with_suffix('.sha256').exists())
 
-    def test_invalid_legacy_snapshot_is_preserved_in_quarantine(self):
+    def test_invalid_legacy_snapshot_is_preserved(self):
         old = self.backups / 'daily-2026-11-14.sqlite3'
         old.write_bytes(b'incomplete')
-        with self.assertLogs(level='WARNING'):
-            self.assertTrue(self.snapshot().is_file())
-        quarantined, = self.backups.glob('.quarantine-*/daily-2026-11-14.sqlite3')
-        self.assertEqual(quarantined.read_bytes(), b'incomplete')
+        self.assertTrue(self.snapshot().is_file())
+        self.assertEqual(old.read_bytes(), b'incomplete')
 
     def test_production_helper_rejects_arbitrary_destination(self):
         with self.assertRaises(PermissionError):
             backup_database(self.database, self.backups, production=True,
-                            now=datetime.now(timezone.utc), keep_days=7, max_bytes=10_000_000)
+                            now=datetime.now(timezone.utc), max_bytes=10_000_000)
         self.assertEqual(list(self.backups.iterdir()), [])
 
     def test_quota_and_lock_prevent_publication(self):

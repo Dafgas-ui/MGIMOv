@@ -1054,3 +1054,20 @@ junction дали по одному SKIP. Этот прогон проверяе
 | `python -B -m unittest discover -s tests -q` | 178 | 0 / 0 | 0 |
 
 `git diff --check` — exit 0.
+
+## RC4 — P0.2a: ротация и тестовое восстановление
+
+Рабочее дерево поверх `5955371`. Прогон Windows в отдельной приватной
+копии проекта на синтетических SQLite. `python -B -m unittest
+tests.test_backup_database tests.test_restore_database -v` — 27 PASS,
+0 FAIL, 0 ERROR, 0 SKIP. Проверены пропуски дат, идемпотентный повтор,
+повреждённая копия, неверный SHA-256, нарушение FK, схема старого релиза,
+существующие файл и sidecar, гонка за имя, отказ из-за прав, реальный
+junction, рубеж публикации и сохранность прежних комплектов.
+
+Выполнен реальный CLI restore. Готовый тестовый файл совпал с исходным
+снимком побайтно, прошёл диагностику и проверку Windows DACL.
+`python -B -m unittest discover -s tests -q` — 192 PASS, 0 FAIL,
+0 ERROR, 0 SKIP. `git diff --check` — exit 0.
+Фактический ENOSPC, остановка процесса с незавершённой записью на Linux,
+запуск службы из восстановленной базы и откат — NOT VERIFIED для P0.2a.

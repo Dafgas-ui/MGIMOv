@@ -1,7 +1,8 @@
 """Create, verify and rotate operator-managed SQLite snapshots."""
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timezone
+import errno
 import logging
 import hashlib
 import os
@@ -14,14 +15,26 @@ from uuid import uuid4
 
 from ..config import ROOT, Settings
 from ..migrations.manager import MigrationError, status, verified_backup
+from .contest_demo_permissions import (
+    check_windows_acl, check_windows_chain, create_windows_directory, windows_user_sid,
+)
 
 
 SNAPSHOT = re.compile(r'daily-(\d{4}-\d{2}-\d{2})\.sqlite3')
 LINUX_DIRECTORY = Path('/opt/mgimov/backups/daily')
 
 
+class BackupQuotaError(ValueError):
+    pass
+
+
 def private_directory(directory):
     path = Path(os.path.abspath(directory))
+    if os.name == 'nt':
+        sid = windows_user_sid()
+        check_windows_chain(path, sid)
+        check_windows_acl(path, sid, directory=True)
+        return path
     if path.resolve(strict=True) != path or not path.is_dir():
         raise PermissionError('Backup directory must be a real directory without symlink components.')
     if os.name == 'posix':
@@ -63,17 +76,73 @@ def directory_bytes(directory):
                if not path.is_symlink() and path.is_file())
 
 
-def validate_snapshot(path, *, require_latest=True):
-    if path.is_symlink() or not path.is_file():
+def plain_path(path, file_type):
+    info = path.lstat()
+    return (stat.S_IFMT(info.st_mode) == file_type
+            and not getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            and (file_type != stat.S_IFREG or info.st_nlink == 1))
+
+
+def validate_snapshot(path):
+    if not plain_path(path, stat.S_IFREG):
         raise ValueError('Invalid snapshot file.')
-    report = status(path)
-    if report['state'] != 'managed' or (require_latest and report['pending']):
+    report = status(path, immutable=True)
+    if report['state'] != 'managed' or report['pending']:
         raise ValueError('Snapshot schema is not ready.')
 
 
+def bundle_day(bundle):
+    match = SNAPSHOT.fullmatch(bundle.name + '.sqlite3')
+    if not match:
+        raise ValueError('Expected a published daily backup directory.')
+    return date.fromisoformat(match[1])
+
+
+def published_files(bundle):
+    bundle_day(bundle)
+    if not plain_path(bundle, stat.S_IFDIR):
+        raise ValueError('Invalid published backup directory.')
+    snapshot = bundle / (bundle.name + '.sqlite3')
+    receipt = bundle / (bundle.name + '.sha256')
+    if set(bundle.iterdir()) != {snapshot, receipt} or not all(
+        plain_path(path, stat.S_IFREG) for path in (snapshot, receipt)
+    ):
+        raise ValueError('Invalid published backup contents.')
+    with receipt.open('rb') as marker:
+        expected = marker.read(66)
+    if not re.fullmatch(rb'[0-9a-f]{64}\n', expected):
+        raise ValueError('Invalid backup checksum receipt.')
+    return snapshot, receipt, expected
+
+
+def verify_published(bundle):
+    snapshot, receipt, expected = published_files(bundle)
+    if expected != (snapshot_digest(snapshot) + '\n').encode('ascii'):
+        raise ValueError('Backup checksum mismatch.')
+    validate_snapshot(snapshot)
+    return snapshot, receipt
+
+
+def rotate(directory, today, keep_successful):
+    verified = []
+    for bundle in directory.iterdir():
+        try:
+            day = bundle_day(bundle)
+            if day < today:
+                verified.append((day, bundle, *verify_published(bundle)))
+        except (ValueError, MigrationError, sqlite3.Error):
+            continue
+    for _, bundle, snapshot, receipt in sorted(verified, reverse=True)[keep_successful - 1:]:
+        snapshot.unlink()
+        receipt.unlink()
+        bundle.rmdir()
+    sync_directory(directory)
+
+
 def write_receipt(database, receipt):
-    with receipt.open('x', encoding='ascii', newline='\n') as marker:
-        marker.write(snapshot_digest(database) + '\n')
+    fd = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0), 0o600)
+    with os.fdopen(fd, 'wb') as marker:
+        marker.write((snapshot_digest(database) + '\n').encode('ascii'))
         marker.flush()
         os.fsync(marker.fileno())
 
@@ -87,11 +156,18 @@ def sync_directory(directory):
             os.close(fd)
 
 
+def make_private_directory(path):
+    if os.name == 'nt':
+        create_windows_directory(path, windows_user_sid())
+    else:
+        path.mkdir(mode=0o700)
+
+
 def quarantine(directory, *paths):
     if sum(1 for _ in directory.glob('.quarantine-*')) >= 7:
         raise OSError('Quarantine limit reached; operator review required.')
     target = directory / ('.quarantine-' + uuid4().hex)
-    target.mkdir(mode=0o700)
+    make_private_directory(target)
     for path in paths:
         if path.exists() or path.is_symlink():
             path.rename(target / path.name)
@@ -102,7 +178,7 @@ def recover_pending(directory):
     pending = directory / '.snapshot-pending'
     if not pending.exists() and not pending.is_symlink():
         return
-    if pending.is_symlink() or not pending.is_dir():
+    if not plain_path(pending, stat.S_IFDIR):
         quarantine(directory, pending)
         return
     entries = list(pending.iterdir())
@@ -114,7 +190,9 @@ def recover_pending(directory):
     receipt = snapshot.with_suffix('.sha256')
     writing = receipt.with_suffix('.sha256.pending')
     try:
-        if set(entries) - {snapshot, receipt, writing} or receipt.is_symlink():
+        if set(entries) - {snapshot, receipt, writing} or (
+            os.path.lexists(receipt) and not plain_path(receipt, stat.S_IFREG)
+        ):
             raise ValueError('Unexpected staging contents.')
         validate_snapshot(snapshot)
         if writing.exists() or writing.is_symlink():
@@ -137,18 +215,16 @@ def recover_pending(directory):
     logging.warning('Recovered interrupted backup: %s', target.name)
 
 
-def backup_database(database, directory, *, now, keep_days, max_bytes, production=False):
+def backup_database(database, directory, *, now, keep_successful=7, max_bytes, production=False):
     database = Path(database).resolve(strict=True)
     directory = private_directory(directory)
     if database.is_relative_to(directory):
         raise ValueError('The source database must be outside the backup directory.')
     if production and directory != LINUX_DIRECTORY:
         raise PermissionError('Use the dedicated production backup directory.')
-    if keep_days < 1 or max_bytes < 1:
-        raise ValueError('Retention and quota must be positive.')
+    if keep_successful < 7 or max_bytes < 1:
+        raise ValueError('Retain at least seven successful backups and use a positive quota.')
     with backup_lock(directory):
-        before_recovery = directory / f'daily-{now.astimezone(timezone.utc).date()}'
-        existed = before_recovery.exists()
         recover_pending(directory)
         for path in directory.iterdir():
             if re.fullmatch(r'\.snapshot-[a-z0-9_]{8}', path.name):
@@ -157,87 +233,41 @@ def backup_database(database, directory, *, now, keep_days, max_bytes, productio
         target = directory / f'daily-{today}.sqlite3'
         receipt = target.with_suffix('.sha256')
         bundle = directory / target.stem
-        if bundle.is_symlink() or (bundle.exists() and existed):
-            raise FileExistsError('A snapshot already exists for this UTC date.')
-        if not bundle.exists() and (target.exists() or receipt.exists() or target.is_symlink() or receipt.is_symlink()):
-            if not receipt.exists() and not receipt.is_symlink():
-                try:
-                    validate_snapshot(target)
-                except (ValueError, MigrationError, sqlite3.Error):
-                    quarantine(directory, target)
-                else:
-                    temporary_receipt = directory / '.legacy-recovery.sha256'
-                    if temporary_receipt.exists() or temporary_receipt.is_symlink():
-                        quarantine(directory, temporary_receipt)
-                    write_receipt(target, temporary_receipt)
-                    temporary_receipt.rename(receipt)
-                    sync_directory(directory)
-                    logging.warning('Recovered legacy snapshot without a checksum: %s', target.name)
-                    return target
-            elif (not target.is_symlink() and target.is_file() and not receipt.is_symlink()
-                  and receipt.is_file() and receipt.stat().st_size == 65
-                  and receipt.read_bytes() == (snapshot_digest(target) + '\n').encode()):
-                raise FileExistsError('A snapshot already exists for this UTC date.')
-            else:
-                quarantine(directory, target, receipt)
-        cutoff = today - timedelta(days=keep_days - 1)
-        expired = []
-        existing_bytes = directory_bytes(directory)
-        for path in directory.iterdir():
-            if path.is_symlink():
-                continue
-            folder = path if path.is_dir() and SNAPSHOT.fullmatch(path.name + '.sqlite3') else None
-            if folder:
-                path = folder / (folder.name + '.sqlite3')
-            match = SNAPSHOT.fullmatch(path.name)
-            if not match or path.is_symlink() or not path.is_file():
-                continue
-            try:
-                day = datetime.strptime(match[1], '%Y-%m-%d').date()
-            except ValueError:
-                continue
-            if path.samefile(database):
-                raise ValueError('Source database overlaps the rotation namespace.')
-            marker = path.with_suffix('.sha256')
-            if day < cutoff and not marker.is_symlink() and marker.is_file() and marker.stat().st_size == 65:
-                if marker.read_bytes() == (snapshot_digest(path) + '\n').encode('ascii'):
-                    if folder is None or set(folder.iterdir()) == {path, marker}:
-                        try:
-                            validate_snapshot(path, require_latest=False)
-                        except (ValueError, MigrationError, sqlite3.Error):
-                            continue
-                        expired.append((path, marker, folder))
+        if os.path.lexists(bundle):
+            snapshot, _ = verify_published(bundle)
+            rotate(directory, today, keep_successful)
+            return snapshot
         estimated = database.stat().st_size
         wal = database.with_name(database.name + '-wal')
         if wal.exists():
             estimated += wal.stat().st_size
-        if not bundle.exists() and existing_bytes + estimated + 65 > max_bytes:
-            raise ValueError('Snapshot quota exceeded.')
-        if not bundle.exists() and shutil.disk_usage(directory).free < estimated + 65:
-            raise OSError('Insufficient free space for snapshot.')
+        if directory_bytes(directory) + estimated + 65 > max_bytes:
+            raise BackupQuotaError('Snapshot quota exceeded; existing backups retained.')
+        if shutil.disk_usage(directory).free < estimated + 65:
+            raise OSError(errno.ENOSPC, 'Insufficient free space for snapshot.')
         pending = directory / '.snapshot-pending'
-        if not bundle.exists():
-            pending.mkdir(mode=0o700)
-            copying = pending / 'copying.sqlite3'
-            verified_backup(database, copying)
-            validate_snapshot(copying)
-            if directory_bytes(directory) + 65 > max_bytes:
-                raise ValueError('Snapshot quota exceeded.')
-            with copying.open('r+b') as snapshot:
-                os.fsync(snapshot.fileno())
-            staged = copying.rename(pending / target.name)
-            sync_directory(pending)
-            writing = pending / (receipt.name + '.pending')
-            write_receipt(staged, writing)
-            writing.rename(pending / receipt.name)
-            sync_directory(pending)
-            pending.rename(bundle)
-            sync_directory(directory)
-        for path, marker, folder in expired:
-            path.unlink()
-            marker.unlink()
-            if folder:
-                folder.rmdir()
+        make_private_directory(pending)
+        copying = pending / 'copying.sqlite3'
+        verified_backup(database, copying)
+        validate_snapshot(copying)
+        if directory_bytes(directory) + 65 > max_bytes:
+            copying.unlink()
+            pending.rmdir()
+            raise BackupQuotaError('Snapshot quota exceeded; existing backups retained.')
+        if os.name == 'posix':
+            copying.chmod(0o600)
+        with copying.open('r+b') as snapshot:
+            os.fsync(snapshot.fileno())
+        staged = copying.rename(pending / target.name)
+        sync_directory(pending)
+        writing = pending / (receipt.name + '.pending')
+        write_receipt(staged, writing)
+        writing.rename(pending / receipt.name)
+        sync_directory(pending)
+        pending.rename(bundle)
+        sync_directory(directory)
+        verify_published(bundle)
+        rotate(directory, today, keep_successful)
         return bundle / target.name
 
 
@@ -253,12 +283,16 @@ def main():
     parser.add_argument('--db', required=True)
     parser.add_argument('--production', action='store_true')
     parser.add_argument('--directory', required=True)
-    parser.add_argument('--keep-days', type=positive_int, default=7)
+    retention = parser.add_mutually_exclusive_group()
+    retention.add_argument('--keep-successful', type=positive_int, default=7)
+    retention.add_argument('--keep-days', type=positive_int, help=argparse.SUPPRESS)
     parser.add_argument('--max-bytes', type=positive_int, required=True)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     os.umask(0o077)
     try:
+        if args.keep_days is not None:
+            logging.warning('--keep-days is deprecated; retention now counts successful daily backups.')
         production = args.production or os.name == 'posix'
         source = Settings(database=Path(args.db)).database
         if production:
@@ -269,11 +303,15 @@ def main():
                 raise ValueError('Source does not match production configuration.')
         target = backup_database(
             source, args.directory, production=production,
-            now=datetime.now(timezone.utc), keep_days=args.keep_days, max_bytes=args.max_bytes,
+            now=datetime.now(timezone.utc),
+            keep_successful=args.keep_days if args.keep_days is not None else args.keep_successful,
+            max_bytes=args.max_bytes,
         )
     except (OSError, ValueError, sqlite3.Error, MigrationError) as error:
-        logging.error('SQLite backup job failed (%s, errno=%s).', type(error).__name__,
-                      getattr(error, 'errno', None))
+        reason = type(error).__name__
+        if getattr(error, 'errno', None) == errno.ENOSPC:
+            reason = 'Insufficient free space'
+        logging.error('SQLite backup job failed (%s, errno=%s).', reason, getattr(error, 'errno', None))
         return 1
     logging.info('SQLite backup verified: %s', target.name)
     return 0

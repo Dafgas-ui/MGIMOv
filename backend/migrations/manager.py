@@ -20,11 +20,12 @@ class MigrationError(Exception):
     """A safe diagnostic without payloads or SQL error values."""
 
 
-def open_database(database, *, readonly=True, timeout=5):
+def open_database(database, *, readonly=True, timeout=5, immutable=False):
     path = Path(database).resolve(strict=True)
     if not path.is_file():
         raise MigrationError("Путь базы должен указывать на существующий файл.")
-    connection = sqlite3.connect(path.as_uri() + ("?mode=ro" if readonly else "?mode=rw"),
+    mode = "ro&immutable=1" if immutable else "ro" if readonly else "rw"
+    connection = sqlite3.connect(path.as_uri() + "?mode=" + mode,
                                  uri=True, isolation_level=None, timeout=timeout)
     connection.execute("PRAGMA foreign_keys=ON")
     return connection
@@ -129,8 +130,8 @@ def inspect(connection, migrations):
             "baseline_required": kind == "legacy"}
 
 
-def status(database, directory=DIRECTORY):
-    with closing(open_database(database)) as connection:
+def status(database, directory=DIRECTORY, *, immutable=False):
+    with closing(open_database(database, immutable=immutable)) as connection:
         connection.execute("BEGIN")
         return inspect(connection, definitions(directory))
 
