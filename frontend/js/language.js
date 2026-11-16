@@ -60,6 +60,7 @@ const entries = `
 Успеваемость|Academic progress
 Обновить успеваемость|Refresh academic progress
 Аттестации|Assessments
+Учебные работы|Coursework
 Мои обращения|My requests
 Текст не сохраняется. Для отдельного обращения сначала проверьте список, затем начните новую отправку.|The text is not saved. Check the list before starting a separate request.
 Начать отдельную заявку|Start a separate request

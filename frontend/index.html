@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/mvp.css">
   <link rel="stylesheet" href="/css/design.css">
+  <link rel="stylesheet" href="/css/coursework.css">
   <script type="module" src="/js/app.js"></script>
   <script type="module" src="/js/account.js"></script>
 </head>
@@ -138,6 +139,12 @@
     <button id="academics-retry" type="button">Обновить успеваемость</button>
     <div id="academics-content"></div>
   </section>
+<section id="coursework-section" class="card screen-off" aria-labelledby="coursework-title" hidden>
+    <h2 id="coursework-title">Учебные работы</h2>
+    <p id="coursework-status" role="status" aria-live="polite"></p>
+    <button id="coursework-refresh" type="button">Обновить</button>
+    <div id="coursework-content"></div>
+</section>
 <section id="attestations-section" class="card screen-off" aria-labelledby="attestations-title" hidden>
     <h2 id="attestations-title">Аттестации</h2>
     <p id="attestations-status" role="status" aria-live="polite"></p>

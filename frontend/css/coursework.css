@@ -1,0 +1,50 @@
+#coursework-section { min-width: 0; }
+#coursework-content { display: grid; gap: 1rem; margin-block: 1rem; }
+.coursework-results { display: grid; gap: 1rem; min-width: 0; }
+#coursework-content > button { justify-self: start; }
+.coursework-row, .coursework-split, .coursework-form, .coursework-review {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: clamp(.75rem, 2vw, 1.25rem);
+  background: var(--surface);
+  min-width: 0;
+}
+.coursework-row, .coursework-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .65fr);
+  gap: 1rem;
+}
+.coursework-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; min-width: 0; }
+.coursework-form, #coursework-section label { display: grid; gap: .5rem; min-width: 0; }
+#coursework-section label[hidden] { display: none; }
+#coursework-section :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .55rem;
+  font: inherit;
+}
+#coursework-section textarea { min-height: 7rem; resize: vertical; }
+#coursework-section :is(h3, h4, p, button) { overflow-wrap: anywhere; }
+.coursework-text { white-space: pre-wrap; }
+.coursework-context, .coursework-note { color: var(--muted); }
+.coursework-pill {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: .2rem .5rem;
+}
+.coursework-history { display: grid; gap: .8rem; padding-inline-start: 1.25rem; }
+.coursework-pill:is([data-state="reviewed"], [data-state="published"]) { color: var(--success); }
+.coursework-pill:is([data-state="returned"], [data-state="retry_allowed"]) { color: var(--warning); }
+.coursework-review { margin-block: .5rem; background: var(--soft); }
+#coursework-status[data-state="success"] { color: var(--success); }
+#coursework-status[data-state="error"] { color: var(--danger); }
+#coursework-status[data-state="conflict"], .coursework-late { color: var(--warning); }
+@media (max-width: 680px) {
+  .coursework-row, .coursework-split { grid-template-columns: minmax(0, 1fr); }
+}

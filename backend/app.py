@@ -15,6 +15,9 @@ from .brs.routes import install_brs
 from .coursework_routes import install_coursework
 
 ASSETS = {
+    "/js/coursework.js": ("js/coursework.js", "text/javascript"),
+    "/js/coursework-client.js": ("js/coursework-client.js", "text/javascript"),
+    "/css/coursework.css": ("css/coursework.css", "text/css"),
     "/js/attestations.js": ("js/attestations.js", "text/javascript"),
     "/js/language.js": ("js/language.js", "text/javascript"),
     "/css/design.css": ("css/design.css", "text/css"),

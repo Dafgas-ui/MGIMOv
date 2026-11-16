@@ -422,13 +422,14 @@ class BRSFoundationTests(unittest.TestCase):
     def setUp(self):
         self.initialize(self.enterContext(temporary()))
 
-    def initialize(self, folder, definitions=DIRECTORY):
+    def initialize(self, folder, definitions=DIRECTORY, *, with_http=True):
         self.settings = Settings(folder / "brs.sqlite3")
         update(self.settings.database, create=True, directory=definitions)
         self.now = int(datetime(2027, 2, 20, 12, tzinfo=MOSCOW).timestamp())
         self.app = create_app(self.settings)
         self.app.state.auth_service.clock = lambda: self.now
         self.clients = {}
+        self.session_tokens = {}
         with connection(self.settings, write=True) as db:
             for sql, rows in [
                 ("INSERT INTO faculties VALUES (?,?)", [("f","Faculty"),("x","Other")]),
@@ -461,14 +462,17 @@ class BRSFoundationTests(unittest.TestCase):
                 token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
                 db.execute("INSERT INTO sessions VALUES (?,?,?,?,?,?,NULL)",
                            (who, who, digest(token), digest(csrf), self.now, self.now+3600))
-                client = self.enterContext(TestClient(self.app, base_url=self.settings.origin))
-                client.cookies.set(self.settings.session_cookie, token)
-                client.cookies.set(self.settings.csrf_cookie, csrf)
-                self.clients[who] = client
+                self.session_tokens[who] = (token, csrf)
             for capability in ("manage_plans", "manage_teaching", "manage_enrollments"):
                 set_capability(db, "admin", self.now, "admin", "f", capability, enabled=True)
             set_capability(db, "admin", self.now, "outside", "x", "manage_teaching", enabled=True)
             db.execute("INSERT INTO request_staff_scopes VALUES ('teacher','f')")
+        if with_http:
+            for who, (token, csrf) in self.session_tokens.items():
+                client = self.enterContext(TestClient(self.app, base_url=self.settings.origin))
+                client.cookies.set(self.settings.session_cookie, token)
+                client.cookies.set(self.settings.csrf_cookie, csrf)
+                self.clients[who] = client
 
     def post(self, path, body, who="admin", **headers):
         client = self.clients[who]

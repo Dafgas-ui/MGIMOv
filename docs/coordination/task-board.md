@@ -271,4 +271,5 @@ RC3.1 и RC3.2 требуют отдельного задания. [Переда
 |---|---|---|---|
 | RC4.1-BACKUP | Sol | review | Восстановление прерванной публикации, карантин, привязка cron к БД службы. Ожидаются повторная проверка Luna и репетиция на Linux |
 | RC4.1-COURSEWORK | Sol | completed | 0015–0019 приняты Luna. Локальный checkpoint `b0e6097` |
-| RC4.1-COURSEWORK-HTTP | Sol | review | Student/Staff HTTP на 0019. Узкая перепроверка Luna по UTF-8, GET и конкурентным сценариям. PDF, frontend и публикация в БРС остаются отдельными этапами |
+| RC4.1-COURSEWORK-HTTP | Sol | completed | Student/Staff HTTP принят Luna и зафиксирован в `904c48a` |
+| RC4.2-COURSEWORK-UI | Sol | completed | Локальный checkpoint разрешён. Luna приняла безопасность и тесты, Astra приняла UI и ясность UX. Адаптивность принята условно, без блокеров |

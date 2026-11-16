@@ -6,7 +6,7 @@ export function mountShell(document,host=globalThis){
   const get=id=>document.getElementById(id);
   let user=null,ready=false,page='profile',scopeKey='';
   const positions=new Map();let navigationKey='';
-  const roots=['profile-section','settings-section','schedule-section','academics-section','attestations-section','requests-section','mvp-section','history-section'];
+  const roots=['profile-section','settings-section','schedule-section','academics-section','attestations-section','coursework-section','requests-section','mvp-section','history-section'];
   const make=(tag,text)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
   const role=()=>ready?user?.role:null;
   const desktop=get('app-sidebar'),prev=get('app-nav-prev'),next=get('app-nav-next');
@@ -76,7 +76,7 @@ export function mountShell(document,host=globalThis){
     }
   }
   function apply(){
-    const map={profile:'profile-section',settings:'settings-section',schedule:'schedule-section',academics:'academics-section',attestations:'attestations-section',requests:'requests-section',queue:'requests-section',history:'history-section'};
+    const map={profile:'profile-section',settings:'settings-section',schedule:'schedule-section',academics:'academics-section',attestations:'attestations-section',coursework:'coursework-section',requests:'requests-section',queue:'requests-section',history:'history-section'};
     const visiblePage=ready?page:'profile';
     const active=map[visiblePage]||'mvp-section';
     for(const id of roots){const root=get(id);if(root)root.classList.toggle('screen-off',id!==active);}
@@ -90,6 +90,7 @@ export function mountShell(document,host=globalThis){
     get('app-bottom').hidden=!ready;get('app-mobile-bar').hidden=!ready;get('app-search-area').hidden=!ready;
     document.documentElement.dataset.role=ready?user.role:'anonymous';
     navigation();
+    if(typeof CustomEvent==='function')document.dispatchEvent?.(new CustomEvent('mgimov:page',{detail:visiblePage}));
   }
   function go(value,{focus=false,hash=true}={}){
     if(user)positions.set(user.id+':'+page,host.scrollY||0);

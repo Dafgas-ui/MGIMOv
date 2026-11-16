@@ -5,6 +5,7 @@ import {requestsIdentity} from './requests.js';
 import {academicsIdentity} from './academics.js';
 import {scheduleIdentity} from './schedule.js';
 import {attestationIdentity} from './attestations.js';
+import {courseworkIdentity} from './coursework.js';
 import {mountLanguage,t} from './language.js';
 import {createAccountState,createAppearanceState,appearanceSurfaces} from './account-state.js';
 const get = id => document.getElementById(id);
@@ -62,6 +63,10 @@ const controller = createAccountState({request:requestJson,
     if(value.state==='ready')language.setUser(value.user);
     else if(['anonymous','logout-pending'].includes(value.state)||value.identityInvalidated)language.setUser(null);
     attestationIdentity(value.state==='ready'?value.user:null,readCsrf);
+    courseworkIdentity(value,readCsrf,()=>{
+      controller.clear(t('Сессия завершена. Войдите снова.','Your session expired. Sign in again.'));
+      channel?.postMessage('identity-changing');
+    });
     if(value.state!=='ready'&&typeof shellIdentity==='function')shellIdentity(value);
     for(const name of ['schedule','academics','requests','notifications','documents'])get('nav-'+name).hidden=value.state!=='ready'||(['schedule','academics'].includes(name)&&value.user?.role!=='student');
     get('nav-staff').hidden=value.state!=='ready'||value.user?.role!=='staff';
