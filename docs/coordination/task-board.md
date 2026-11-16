@@ -273,3 +273,4 @@ RC3.1 и RC3.2 требуют отдельного задания. [Переда
 | RC4.1-COURSEWORK | Sol | completed | 0015–0019 приняты Luna. Локальный checkpoint `b0e6097` |
 | RC4.1-COURSEWORK-HTTP | Sol | completed | Student/Staff HTTP принят Luna и зафиксирован в `904c48a` |
 | RC4.2-COURSEWORK-UI | Sol | completed | Локальный checkpoint разрешён. Luna приняла безопасность и тесты, Astra приняла UI и ясность UX. Адаптивность принята условно, без блокеров |
+| RC4-P0.1-DEMO | Sol | review | Изолированный seed, Student → Staff → Student и подтверждаемые Windows-фикстуры для проверки цепочки путей. Ожидается повторная проверка Luna |

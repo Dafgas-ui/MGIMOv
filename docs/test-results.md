@@ -965,3 +965,92 @@ Uvicorn и временная синтетическая SQLite.
 сессии. Тест достиг барьера завершения обработки 401 и упал на проверке роли:
 ожидалось `student`, получено `anonymous`. Обычный тест прошёл.
 Логи сохранены в `.tmp/rc42-final-*.log`, снимки — в `.tmp/playwright-p1/results/`.
+
+## RC4 — P0.1 конкурсная демосреда
+
+Дерево поверх `494007a`. Проверки выполнялись на временных синтетических
+SQLite с доступом к Windows loopback.
+
+- `.\.venv\Scripts\python.exe -B -m unittest tests.test_contest_demo -v` — 1/1, exit 0.
+- `.\.venv\Scripts\python.exe -B -m unittest discover -s tests -q` — 173/173, exit 0.
+- `npm test` — 84/84, exit 0.
+- Полный существующий Chrome-набор Playwright — 16/16, exit 0. Тесты RC3.1
+  использовали копии синтетической базы Astra, её SHA-256 осталась прежней.
+- Отдельный запуск Uvicorn на БД новой команды — 200 для страницы, ассетов и
+  health, 401 для анонимного чтения Coursework. Сервер остановлен.
+- `git diff --check` — exit 0.
+
+Новый HTTP-тест дважды готовит демосреду и подтверждает неизменность первой
+базы, схему до 0019, integrity/FK, вход трёх учёток, чтение расписания, БРС и
+зачётки, сдачу и возврат с повтором, сохранение баллов и изоляцию. Полный
+Chrome-набор использует свои фикстуры. Ручной показ новой базы в Chrome
+остаётся проверкой для независимой приёмки.
+
+### P0.1 — блокер наследуемой Windows ACL
+
+Проверено на Windows на временных SQLite. DACL каталога снята отдельно от
+проверки seed: `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;CURRENT_USER_SID)`.
+DACL базы: `D:(A;ID;FA;;;CURRENT_USER_SID)(A;ID;FA;;;SY)(A;ID;FA;;;BA)`.
+Проверенный SID пользователя в записи заменён на метку. SYSTEM имеет
+SID `S-1-5-18`, Builtin Administrators — `S-1-5-32-544`. Все три имеют
+FullControl. В каталоге наследование от родителя отключено. SQLite наследует
+ровно эти разрешения. ACL проектной `.tmp` до и после совпала.
+
+Постоянный тест проверил фактические права живых SQLite `-journal`, `-wal`,
+`-shm`. Отрицательный тест создал временную папку с реальным небезопасным
+наследованием. Проверка ACL отклонила её до SQLite и вернула путь папки.
+Повторная подготовка и HTTP-сценарий Student/Staff прошли. Linux/macOS в этом
+прогоне не проверялись.
+
+- `.\.venv\Scripts\python.exe -B -m unittest tests.test_contest_demo -v` — 3/3.
+- `.\.venv\Scripts\python.exe -B -m unittest discover -s tests -q` — 175/175.
+- `npm test` — 84/84.
+- Полный Chrome Playwright — 16/16. Синтетическая исходная SQLite Astra
+  сохранила SHA-256. Лог — `.tmp/p01-acl-full-chrome.log`.
+- `git diff --check` — exit 0.
+
+### P0.1 — защита родительского пути Windows
+
+Рабочее дерево поверх `494007a`. Проверка ACL исходного пути отказала на
+`C:\Projects`, где у Authenticated Users (`S-1-5-11`) действует Modify.
+Прямой вызов seed отказал до SQLite. DACL исходной `.tmp` до и после совпала.
+Цепочка через `C:\Users` и профиль пользователя прошла проверку. В приватной
+копии у каталога запуска защищённая DACL `D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;CURRENT_USER_SID)`.
+SQLite наследует `D:(A;ID;FA;;;CURRENT_USER_SID)(A;ID;FA;;;SY)(A;ID;FA;;;BA)`.
+Те же три SID проверены на живых `-journal`, `-wal` и `-shm`.
+
+Профильный тест выдал `DELETE_CHILD` на реальном предке после первой проверки
+checkout и получил отказ до SQLite. Реальный junction тоже получил отказ.
+В отдельной непривилегированной сессии Windows гонка после последней
+проверки не воспроизводилась. После этой проверки защита опирается на DACL
+объекта и его предков, включая право `DELETE_CHILD` у каждого родителя.
+
+- `python -B -m unittest tests.test_contest_demo -v` в приватной копии — 6/6.
+- `python -B -m unittest discover -s tests -q` в приватной копии — 178/178.
+- `npm test` — 84/84.
+- `playwright.cmd test --reporter=list --output ../../.tmp/playwright-p01-path/results`
+  из `tests/browser` — 16/16 в Chrome на штатных временных фикстурах.
+- `git diff --check` — без замечаний.
+
+### P0.1 — повторная проверка двух Windows-фикстур
+
+Sol, рабочее дерево поверх `494007a`, одноразовая приватная копия проекта
+на Windows. Тест `DELETE_CHILD` прочитал фактическую DACL и подтвердил
+действующий Allow ACE с `0x40` для Authenticated Users (`S-1-5-11`).
+После проверки восстановлена DACL тестовой папки. Тест junction подтвердил
+атрибут reparse point, тег mount point и совпадение с назначенной целью.
+Генератор отклонил обе подтверждённые фикстуры до записи SQLite.
+
+При контролируемой проверке отсутствие нужного ACE и отказ команды создания
+junction дали по одному SKIP. Этот прогон проверяет только отчётность тестов.
+**NOT VERIFIED** — отказ самой ОС в другой Windows-среде и конкурентная
+подмена после финальной проверки из отдельной учётной записи.
+
+| Прогон | PASS | FAIL / ERROR | SKIP |
+| --- | ---: | ---: | ---: |
+| `python -B -m unittest tests.test_contest_demo -v` | 6 | 0 / 0 | 0 |
+| Обе фикстуры в обратном порядке | 2 | 0 / 0 | 0 |
+| Контролируемая недоступность двух фикстур | 0 | 0 / 0 | 2 |
+| `python -B -m unittest discover -s tests -q` | 178 | 0 / 0 | 0 |
+
+`git diff --check` — exit 0.
