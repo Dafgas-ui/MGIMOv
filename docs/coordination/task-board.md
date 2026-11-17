@@ -269,7 +269,8 @@ RC3.1 и RC3.2 требуют отдельного задания. [Переда
 
 | ID | Ответственный | Состояние | Критерий |
 |---|---|---|---|
-| RC4.1-BACKUP | Sol | review | P0.2a: ротация успешных комплектов и восстановление в новый тестовый файл. Ожидается проверка Luna. Репетиция Linux, уведомления и расписание относятся к следующему этапу |
+| RC4.1-BACKUP | Sol | review | P0.2a: локальный checkpoint `6601c05` после приёмки Luna. Релизные проверки CLI на Linux и расписания открыты |
+| RC4-P0.2B | Sol | review | Репетиция restore и rollback на синтетических SQLite. [Процедура](../rc4-foundation.md#p02b--репетиция-восстановления-и-отката) |
 | RC4.1-COURSEWORK | Sol | completed | 0015–0019 приняты Luna. Локальный checkpoint `b0e6097` |
 | RC4.1-COURSEWORK-HTTP | Sol | completed | Student/Staff HTTP принят Luna и зафиксирован в `904c48a` |
 | RC4.2-COURSEWORK-UI | Sol | completed | Локальный checkpoint разрешён. Luna приняла безопасность и тесты, Astra приняла UI и ясность UX. Адаптивность принята условно, без блокеров |
