@@ -5,6 +5,8 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 
 TEXT_SUBMISSION = re.compile(r'/api/v1/me/coursework/[A-Za-z0-9_-]{1,100}/submissions')
+COURSEWORK_FILES = re.compile(r'/api/v1/(?:me/coursework/[A-Za-z0-9_-]{1,100}/submissions/with-files|'
+                              r'staff/coursework/[A-Za-z0-9_-]{1,100}/materials)')
 
 class IdentityGuard:
     def __init__(self, app, settings, body_timeout=10.0):
@@ -30,6 +32,8 @@ class IdentityGuard:
         if len(headers.getlist('x-csrf-token'))>1 or len(headers.getlist('x-mgimov-user'))>1:
             return await reject(400)
         body_limit = 32768 if scope['method'] == 'POST' and TEXT_SUBMISSION.fullmatch(path) else 8192
+        if scope['method'] == 'POST' and COURSEWORK_FILES.fullmatch(path):
+            body_limit = 212992
         async def read_body():
             body=bytearray()
             while True:

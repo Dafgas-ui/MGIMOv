@@ -165,6 +165,8 @@ def save_receipt(db, actor, command, request_key, fingerprint, version_id):
 
 
 def change_result(db, actor, now, offering, enrollment, event_code, attempt, data, *, command):
+    if not db.in_transaction:
+        raise RuntimeError('BRS publication requires a write transaction.')
     key, event = context(db, actor, now, offering, enrollment, event_code)
     fingerprint = payload_hash(offering, enrollment, event_code, attempt, data)
     previous = replay(db, actor, command, offering, enrollment, event_code, attempt, data)
@@ -175,6 +177,8 @@ def change_result(db, actor, now, offering, enrollment, event_code, attempt, dat
         current = next((row for row in attempts if row["attempt_no"] == attempt), None)
         if current is None or current["enrollment_id"] != enrollment:
             fail(404)
+        if db.execute('SELECT 1 FROM coursework_brs_sources WHERE version_id=?', (current['id'],)).fetchone():
+            fail(409, 'Исправьте результат через новую проверку учебной работы.')
     if version != data["expected_result_version"]:
         fail(409, "Версия результата изменилась.")
 
@@ -206,7 +210,7 @@ def change_result(db, actor, now, offering, enrollment, event_code, attempt, dat
         db.execute("""DELETE FROM brs_attempt_drafts
             WHERE (enrollment_id,course_id,plan_id,event_code,attempt_no)=(?,?,?,?,?)""",
             (enrollment, *key, attempt))
-    audit(db, actor, "brs.attempt." + command, "brs_attempt_version", version_id, version + 1, now)
+    audit(db, actor, "brs.attempt." + command, "brs_attempt_version", version_id, version + 1, now, required=True)
     save_receipt(db, actor, command, data["request_key"], fingerprint, version_id)
     return version_summary(get(db, "SELECT * FROM brs_attempt_versions WHERE id=?", version_id))
 

@@ -1,5 +1,6 @@
 """Offline Windows release rehearsal, using real CLI subprocesses and loopback HTTP."""
 from contextlib import closing, contextmanager
+import base64
 from datetime import datetime, timezone
 import hashlib
 import os
@@ -135,7 +136,8 @@ class RecoveryRehearsalTest(unittest.TestCase):
             self.assertEqual(response.status_code, expected, path)
             return response.json()
 
-        post(student, url, work['recipient_version'], 201, response='Synthetic attempt one')
+        post(student, url+'/with-files', work['recipient_version'], 201, response='Synthetic attempt one',
+             files=[{'name':'answer.txt','content':base64.b64encode(b'Synthetic attachment').decode()}])
         returned = post(teacher, review_url, 2, 200, action='review', data={
             'course_id': course, 'attempt_no': 1, 'decision': 'returned', 'comment': 'Synthetic return',
         })
@@ -150,6 +152,11 @@ class RecoveryRehearsalTest(unittest.TestCase):
         self.assertEqual(len(detail['attempts']), 2)
         self.assertEqual([entry['decision'] for entry in detail['reviews']], ['returned', 'reviewed'])
         self.assertEqual(detail['reviews'][-1]['points'], 8)
+        attachment, = detail['files']
+        self.assertEqual(attachment['attempt_no'], 1)
+        download = '/api/v1/me/coursework/files/' + attachment['id']
+        self.assertEqual(student.get(download).content, b'Synthetic attachment')
+        self.assertEqual(other.get(download).status_code, 404)
         self.get(other, '/me/coursework/' + work['id'], 404)
         self.get(other, f'/me/brs/courses/{course}/results', 404)
         self.get(student, '/staff/coursework', 403)
@@ -202,7 +209,7 @@ class RecoveryRehearsalTest(unittest.TestCase):
         def verify_recovered(output):
             self.assertEqual(digest(output), original_bundle[0])
             self.cli(ROOT, 'diagnose', '--db', output)
-            self.assertEqual(status(output)['applied'][-1], '0019_coursework_parent_guards')
+            self.assertEqual(status(output)['applied'][-1], '0023_coursework_brs_server_audit')
             with closing(sqlite3.connect(output.as_uri() + '?mode=ro', uri=True)) as db:
                 self.assertEqual(db.execute('SELECT id, role FROM users ORDER BY id').fetchall(), roles)
             with self.serve(ROOT, output) as origin:
@@ -233,7 +240,7 @@ class RecoveryRehearsalTest(unittest.TestCase):
         make_private_directory(candidate)
         shutil.copytree(ROOT / 'backend', candidate / 'backend', ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copytree(ROOT / 'frontend', candidate / 'frontend')
-        (candidate / 'backend/migrations/0020_rehearsal.sql').write_text(
+        (candidate / 'backend/migrations/0024_rehearsal.sql').write_text(
             'CREATE TABLE rehearsal_upgrade (id INTEGER PRIMARY KEY);\n', encoding='ascii')
         candidate_db = candidate / 'candidate.sqlite3'
         shutil.copyfile(backup, candidate_db)

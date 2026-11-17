@@ -217,6 +217,7 @@ class BRSResultsTests(unittest.TestCase):
         self.assertEqual(self.case.clients["teacher"].get(self.path.replace(self.flow,other)+"/result").status_code,404)
         body = {"request_key":"pub","expected_result_version":0,"expected_draft_version":1}
         self.assertEqual(self.draft(1).status_code,200)
+        self.assertEqual(self.case.post(self.path+"/attempts/1/publish",body,"outside").status_code,404)
         self.assertEqual(self.case.post(self.path+"/attempts/1/publish",body,"teacher",Origin="https://invalid.test").status_code,403)
         self.assertEqual(self.case.post(self.path+"/attempts/1/publish",body,"teacher",**{"X-CSRF-Token":"bad"}).status_code,403)
         self.assertEqual(self.publish().status_code,200)
@@ -245,6 +246,28 @@ class BRSResultsTests(unittest.TestCase):
         self.assertEqual(codes,[200,409])
         self.assertEqual(self.case.count("brs_attempt_versions"),1)
         self.assertEqual(self.case.count("brs_operation_receipts"),1)
+
+    def test_silently_missing_audit_rolls_back_publish_and_correction(self):
+        self.setup_course()
+        self.assertEqual(self.draft(5).status_code, 200)
+        correct = {"expected_result_version":1, "request_key":"correction", "points":6, "reason":"Correction"}
+        for action, command, previous_count in (
+            ('publish', self.publish, 0),
+            ('correct', lambda: self.command('/attempts/1/correct', correct), 1),
+        ):
+            with self.subTest(action=action):
+                with connection(self.case.settings, write=True) as db:
+                    db.execute("""CREATE TRIGGER simulate_missing_audit BEFORE INSERT ON staff_audit
+                        WHEN NEW.action LIKE 'brs.attempt.%' BEGIN SELECT RAISE(IGNORE); END""")
+                self.assertEqual(command().status_code, 503)
+                for table in ('brs_attempt_versions', 'brs_operation_receipts'):
+                    self.assertEqual(self.case.count(table), previous_count)
+                self.assertEqual(self.case.count('brs_attempt_drafts'), int(action == 'publish'))
+                with connection(self.case.settings, write=True) as db:
+                    self.assertIsNone(db.execute('SELECT 1 FROM staff_audit WHERE action=?',
+                                                 ('brs.attempt.' + action,)).fetchone())
+                    db.execute('DROP TRIGGER simulate_missing_audit')
+                self.assertEqual(command().status_code, 200)
 
     def transfer(self, target, mapping=None):
         body = {"target_offering_id":target,"starts_on":"2027-02-20","reason":"Approved"}
@@ -351,7 +374,7 @@ class BRSResultsTests(unittest.TestCase):
                                      grants,"staff_audit","assessment_attempts")}
         before = snapshot(self.case.settings)
         backup = self.root/"before-0010.sqlite3"
-        self.assertEqual(update(self.case.settings.database,backup=backup)["applied"][-1],"0019_coursework_parent_guards")
+        self.assertEqual(update(self.case.settings.database,backup=backup)["applied"][-1],"0023_coursework_brs_server_audit")
         self.assertEqual(update(self.case.settings.database)["pending"],[])
         self.assertEqual(status(backup,directory=definitions)["applied"][-1],"0009_brs_course_insert_guard")
         self.assertEqual(snapshot(type(self.case.settings)(backup)),before)
@@ -397,7 +420,7 @@ class BRSResultsTests(unittest.TestCase):
         database = self.case.settings.database
         backup = self.root / "before-0011.sqlite3"
         self.assertEqual(self.case.clients["alice"].get(self.public).status_code, 503)
-        self.assertEqual(update(database,backup=backup)["applied"][-1],"0019_coursework_parent_guards")
+        self.assertEqual(update(database,backup=backup)["applied"][-1],"0023_coursework_brs_server_audit")
         self.assertEqual(update(database)["pending"],[])
         with connection(self.case.settings,write=True) as db:
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")

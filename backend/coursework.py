@@ -7,6 +7,8 @@ from uuid import uuid4
 from .auth.service import AuthError
 from .brs.service import date_at, fail, get, teaching_access, teaching_offerings
 from .events import audit
+from .coursework_files import list_files, store_files
+from .coursework_brs import publication_context, publications, publish_review
 
 
 def create_draft(db, actor, now, offering_id, *, kind, title, description, due_at, mode):
@@ -44,7 +46,9 @@ COMMAND_FIELDS = {
     'edit_draft': (set(), set(DRAFT_FIELDS)),
     'publish': (set(), {'event_code', 'grading_mode', 'max_points'}),
     'copy': ({'target_offering_id'}, {'due_at'}),
-    'submit_text': ({'response'}, set()),
+    'submit_text': ({'response'}, {'files'}),
+    'attach_materials': ({'files'}, set()),
+    'publish_brs': ({'course_id', 'attempt_no', 'review_revision', 'expected_result_version'}, set()),
     'record_in_person': ({'course_id'}, set()),
     'review': ({'course_id', 'attempt_no', 'decision', 'comment'}, {'points', 'reason'}),
 }
@@ -77,12 +81,14 @@ def student_work(db, actor, assignment_id, *, now=None):
     own = recipient(db, actor, assignment_id)
     # Existing service callers use this function for history without a session clock.
     row = get(db, STUDENT_WORKS + " AND a.id=?", actor['id'], assignment_id)
-    return {**student_summary(row, now), **work_history(db, assignment_id, own['course_id'])}
+    return {**student_summary(row, now), **work_history(db, assignment_id, own['course_id']),
+            'materials': list_files(db, assignment_id)}
 
 
 def work_history(db, assignment_id, course_id):
     args = (assignment_id, course_id)
-    return {'attempts': [dict(row) for row in db.execute(
+    return {'files': list_files(db, assignment_id, course_id),
+            'brs_publications': publications(db, assignment_id, course_id), 'attempts': [dict(row) for row in db.execute(
         """SELECT number,method,response,submitted_at,late FROM coursework_attempts
            WHERE assignment_id=? AND course_id=? ORDER BY number""", args)],
         'reviews': [dict(row) for row in db.execute(
@@ -162,11 +168,25 @@ def staff_works(db, actor, now, offering_id=None, semester_id=None):
 def staff_recipient_work(db, actor, now, assignment_id, course_id):
     assignment = get(db, "SELECT * FROM coursework_assignments WHERE id=? AND status='published'", assignment_id)
     teaching_access(db, actor, now, assignment['offering_id'])
-    own = get(db, """SELECT r.version, p.full_name AS student_name FROM coursework_recipients r
+    own = get(db, """SELECT r.version, p.full_name AS student_name, n.starts_on, n.ends_on
+        FROM coursework_recipients r JOIN brs_enrollments n ON n.id=r.enrollment_id
         JOIN brs_student_courses c ON c.id=r.course_id JOIN student_profiles p ON p.user_id=c.student_id
         WHERE r.assignment_id=? AND r.course_id=?""", assignment_id, course_id)
+    history = work_history(db, assignment_id, course_id)
+    reviews = history['reviews']
+    latest = history['attempts'][-1] if history['attempts'] else None
+    can_retry = latest and reviews and reviews[-1]['attempt_no'] == latest['number'] and retry_allowed(reviews[-1]['decision'])
+    brs_version = db.execute("""SELECT coalesce(max(v.result_version),0) FROM brs_attempt_versions v
+        JOIN brs_event_results b ON b.id=v.result_id
+        JOIN brs_offerings o ON o.plan_id=b.plan_id
+        WHERE o.id=? AND b.event_code=? AND b.course_id=?""",
+        (assignment['offering_id'], assignment['event_code'], course_id)).fetchone()[0]
     return {'course_id': course_id, 'recipient_version': own['version'],
-            'student_name': own['student_name'], **work_history(db, assignment_id, course_id)}
+            'brs_result_version': brs_version,
+            'student_name': own['student_name'],
+            'can_record_in_person': bool(assignment['mode'] != 'online' and own['ends_on'] is None
+                                         and own['starts_on'] <= date_at(now) and (not latest or can_retry)),
+            **history}
 
 
 def staff_work(db, actor, now, assignment_id):
@@ -177,7 +197,20 @@ def staff_work(db, actor, now, assignment_id):
         FROM coursework_recipients r JOIN brs_student_courses c ON c.id=r.course_id
         JOIN student_profiles p ON p.user_id=c.student_id
         WHERE r.assignment_id=? ORDER BY r.course_id""", (assignment_id,))
-    return {**staff_summary(assignment), 'recipients': [dict(row) for row in roster]}
+    return {**staff_summary(assignment), 'recipients': [dict(row) for row in roster],
+            'materials': list_files(db, assignment_id)}
+
+
+def download_file(db, actor, now, file_id):
+    file = get(db, 'SELECT id,assignment_id,course_id,name FROM coursework_files WHERE id=?', file_id)
+    assignment = get(db, 'SELECT id,status,offering_id FROM coursework_assignments WHERE id=?', file['assignment_id'])
+    if actor['role'] == 'student':
+        own = recipient(db, actor, assignment['id'])
+        if assignment['status'] != 'published' or file['course_id'] not in (None, own['course_id']):
+            fail(404)
+    else:
+        teaching_access(db, actor, now, assignment['offering_id'])
+    return file['name'], get(db, 'SELECT content FROM coursework_files WHERE id=?', file_id)['content']
 
 
 def publish(db, assignment, now, data):
@@ -329,10 +362,12 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
         flow = teaching_access(db, actor, now, assignment['offering_id'])
         if action == 'copy':
             teaching_access(db, actor, now, data['target_offering_id'])
-        elif action in ('record_in_person', 'review'):
+        elif action in ('record_in_person', 'review', 'publish_brs'):
             own = recipient(db, actor, assignment_id, data['course_id'])
     if own is not None and assignment['status'] != 'published':
         fail(404)
+    if action == 'publish_brs':
+        brs_context = publication_context(db, actor, now, assignment, own)
     fingerprint, previous = receipt_for(db, actor, request_key, [assignment_id, action, expected_version, data])
     if previous is not None:
         return previous
@@ -350,6 +385,12 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
             WHERE id=?""", (*fields, assignment_id))
     elif action == 'publish':
         publish(db, assignment, now, data)
+    elif action == 'attach_materials':
+        if assignment['status'] != 'draft':
+            fail(409, 'Материалы можно добавить только в черновик.')
+        store_files(db, assignment_id, data['files'])
+    elif action == 'publish_brs':
+        result.update(publish_review(db, actor, now, assignment, own, data, context=brs_context))
     elif action == 'copy':
         if data['target_offering_id'] == assignment['offering_id']:
             fail(422, 'Выберите другой поток.')
@@ -362,6 +403,8 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
             if not isinstance(response, str) or '\0' in response or not 1 <= len(response.strip()) <= 4000:
                 fail(422, 'Укажите текст работы.')
             result.update(add_attempt(db, actor, now, assignment, own, 'text', response.strip()))
+            if 'files' in data:
+                store_files(db, assignment_id, data['files'], course=own['course_id'], attempt=result['attempt_no'])
         else:
             if action == 'record_in_person':
                 result.update(add_attempt(db, actor, now, assignment, own, 'in_person', None))
@@ -370,9 +413,10 @@ def execute(db, actor, now, assignment_id, action, *, expected_version, request_
     if own is not None:
         db.execute('UPDATE coursework_recipients SET version=? WHERE assignment_id=? AND course_id=?',
                    (result['version'], assignment_id, own['course_id']))
-    elif action in ('publish', 'edit_draft'):
+    elif action in ('publish', 'edit_draft', 'attach_materials'):
         db.execute('UPDATE coursework_assignments SET version=? WHERE id=?', (result['version'], assignment_id))
     if actor['role'] == 'staff':
-        audit(db, actor, 'coursework.' + action, 'coursework_assignment', assignment_id, result['version'], now)
+        audit(db, actor, 'coursework.' + action, 'coursework_assignment', assignment_id, result['version'], now,
+              required=action == 'publish_brs')
     save_receipt(db, actor, request_key, fingerprint, result)
     return result

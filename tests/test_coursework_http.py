@@ -1,12 +1,17 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+import base64
 import json
 import secrets
+import shutil
+import sqlite3
 from threading import Barrier
 import unittest
 
 from fastapi.testclient import TestClient
 
 from backend.db import connection
+from backend.migrations.manager import DIRECTORY, MigrationError, status, update, verified_backup
 from tests import test_brs_foundation as foundation
 
 
@@ -42,6 +47,258 @@ class CourseworkHTTPTests(unittest.TestCase):
     def command(self, work, action, version, **data):
         return self.case.post(f'{STAFF}/{work}/commands',
                               self.payload(version, action=action, data=data), 'teacher')
+
+    def test_record_in_person_permissions_replay_and_recipient_version(self):
+        work = self.create()
+        course = self.enrollment['course_id']
+        self.assertEqual(self.command(work, 'publish', 1).status_code, 200)
+        commands = f'{STAFF}/{work}/commands'
+        detail = f'{STAFF}/{work}/recipients/{course}'
+        request = self.payload(action='record_in_person', data={'course_id': course})
+        teacher = self.case.clients['teacher']
+        self.assertTrue(teacher.get(detail).json()['can_record_in_person'])
+        self.assertEqual(self.case.post(commands, request, 'outside').status_code, 404)
+        self.assertEqual(self.case.post(commands, request, 'bobby').status_code, 403)
+        recorded = self.case.post(commands, request, 'teacher')
+        self.assertEqual(recorded.status_code, 200)
+        self.assertEqual(self.case.post(commands, request, 'teacher').json(), recorded.json())
+        self.assertFalse(teacher.get(detail).json()['can_record_in_person'])
+        self.assertEqual(self.command(work, 'record_in_person', 1, course_id=course).status_code, 409)
+        self.assertEqual(self.case.clients['bobby'].get(f'{STUDENT}/{work}').status_code, 404)
+        attempts = self.case.clients['alice'].get(f'{STUDENT}/{work}').json()['attempts']
+        self.assertEqual([attempt['method'] for attempt in attempts], ['in_person'])
+
+    def test_private_files_are_versioned_and_committed_with_attempt(self):
+        work = self.create()
+        posted = f'{STAFF}/{work}/materials'
+        material = {'name':'guide.txt', 'content':base64.b64encode(b'Synthetic material').decode()}
+        case = self.case
+        body = self.payload(files=[material])
+        self.assertEqual(case.post(posted, body, 'outside').status_code, 404)
+        added = case.post(posted, body, 'teacher')
+        self.assertEqual(added.status_code, 200, added.text)
+        self.assertEqual(case.post(posted, body, 'teacher').json(), added.json())
+        item, = case.clients['teacher'].get(f'{STAFF}/{work}').json()['materials']
+        material_url = f"{STUDENT}/files/{item['id']}"
+        self.assertEqual(case.clients['alice'].get(material_url).status_code, 404)
+        self.assertEqual(self.command(work, 'publish', 2).status_code, 200)
+        self.assertEqual(case.clients['alice'].get(material_url).content, b'Synthetic material')
+        self.assertEqual(case.clients['bobby'].get(material_url).status_code, 404)
+        self.assertEqual(case.post(posted, self.payload(version=3, files=[material]), 'teacher').status_code, 409)
+
+        url = f'{STUDENT}/{work}/submissions/with-files'
+        for file in ({**material, 'name':'../bad.txt'}, {**material, 'name':'bad.pdf'},
+                     {**material, 'name':'CON.txt'}, {**material, 'content':'AA=='},
+                     {**material, 'content':base64.b64encode(b'x' * 65537).decode()}):
+            self.assertEqual(case.post(url, self.payload(response='Answer', files=[file]), 'alice').status_code, 422)
+        self.assertEqual(case.count('coursework_attempts'), 0)
+        self.assertEqual(case.post(url, self.payload(response='Answer', files=[material]*3), 'alice').status_code, 422)
+        attached = self.payload(response='Answer', files=[{**material, 'name':'answer.md'}])
+        self.assertEqual(case.post(url, attached, 'bobby').status_code, 404)
+        barrier = Barrier(2)
+
+        def submit_same_request():
+            barrier.wait(timeout=5)
+            return case.post(url, attached, 'alice')
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first, second = (future.result(timeout=10) for future in
+                             [pool.submit(submit_same_request), pool.submit(submit_same_request)])
+        self.assertEqual([first.status_code, second.status_code], [201, 201])
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(case.count('coursework_attempts'), 1)
+        attempt_file, = case.clients['alice'].get(f'{STUDENT}/{work}').json()['files']
+        self.assertEqual(attempt_file['attempt_no'], 1)
+        path = f"/files/{attempt_file['id']}"
+        self.assertEqual(case.clients['bobby'].get(STUDENT+path).status_code, 404)
+        self.assertEqual(case.clients['outside'].get(STAFF+path).status_code, 404)
+        downloaded = case.clients['teacher'].get(STAFF+path)
+        self.assertEqual(downloaded.content, b'Synthetic material')
+        self.assertEqual(downloaded.headers['content-type'], 'application/octet-stream')
+        self.assertTrue(downloaded.headers['content-disposition'].startswith('attachment;'))
+        with connection(case.settings, write=True) as db:
+            for sql in ('UPDATE coursework_files SET content=X\'00\' WHERE id=?',
+                        'DELETE FROM coursework_files WHERE id=?',
+                        'INSERT OR REPLACE INTO coursework_files SELECT * FROM coursework_files WHERE id=?'):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    db.execute(sql, (attempt_file['id'],))
+
+    def test_publish_review_to_brs_with_provenance_and_explicit_correction(self):
+        work = self.create()
+        case = self.case
+        course = self.enrollment['course_id']
+        commands = f'{STAFF}/{work}/commands'
+        sources = f'{STUDENT}/{work}'
+        self.assertEqual(self.command(work, 'publish', 1, event_code='e').status_code, 200)
+        self.assertEqual(case.post(sources+'/submissions', self.payload(response='Answer'), 'alice').status_code, 201)
+        review = {'course_id':course, 'attempt_no':1, 'decision':'reviewed', 'comment':'Checked', 'points':8}
+        self.assertEqual(self.command(work, 'review', 2, **review).status_code, 200)
+        fields = {'course_id':course, 'attempt_no':1, 'review_revision':1, 'expected_result_version':0}
+        payload = self.payload(version=3, action='publish_brs', data=fields)
+        self.assertEqual(case.post(commands, payload, 'outside').status_code, 404)
+        self.assertEqual(case.post(commands, payload, 'alice').status_code, 403)
+        self.assertEqual(self.command(work, 'publish_brs', 3, **{**fields, 'review_revision':2}).status_code, 409)
+        self.assertEqual(case.count('brs_attempt_versions'), 0)
+        before_gradebook = case.clients['alice'].get('/api/v1/me/gradebook').json()
+        barrier = Barrier(2)
+
+        def publish_same_request():
+            barrier.wait(timeout=5)
+            return case.post(commands, payload, 'teacher')
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first, second = (future.result(timeout=10) for future in
+                             [pool.submit(publish_same_request), pool.submit(publish_same_request)])
+        self.assertEqual([first.status_code, second.status_code], [200, 200], first.text)
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(case.count('brs_attempt_versions'), 1)
+        self.assertEqual(self.command(work, 'publish_brs', 3, **fields).status_code, 409)
+
+        self.assertEqual(self.command(work, 'review', 4, **{**review, 'points':7, 'reason':'Corrected calculation'}).status_code, 200)
+        correction = {**fields, 'review_revision':2, 'expected_result_version':1}
+
+        def publish_competing_correction():
+            barrier.wait(timeout=5)
+            return self.command(work, 'publish_brs', 5, **correction)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            replies = [pool.submit(publish_competing_correction), pool.submit(publish_competing_correction)]
+            self.assertEqual(sorted(reply.result(timeout=10).status_code for reply in replies), [200, 409])
+        history = case.clients['alice'].get(sources).json()['brs_publications']
+        self.assertEqual([(item['brs_attempt_no'], item['revision_no'], item['review_revision'], item['points'])
+                          for item in history], [(1, 1, 1, 8), (1, 2, 2, 7)])
+        self.assertEqual(case.clients['alice'].get('/api/v1/me/gradebook').json(), before_gradebook)
+        with connection(case.settings, write=True) as db:
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'Coursework owns'):
+                db.execute("""INSERT INTO brs_attempt_versions
+                    SELECT 'forged',result_id,enrollment_id,attempt_no,3,3,6,actor_id,published_at,'Forged correction'
+                    FROM brs_attempt_versions WHERE id=?""", (history[-1]['brs_version_id'],))
+        brs_path = f"/api/v1/staff/brs/offerings/{self.flow}/enrollments/{self.enrollment['id']}/events/e/attempts"
+        direct = case.post(brs_path+'/1/correct', {
+            'expected_result_version':2, 'request_key':secrets.token_hex(16), 'points':6,
+            'reason':'Direct correction',
+        }, 'teacher')
+        self.assertEqual(direct.status_code, 409)
+        self.assertEqual(self.command(work, 'review', 6, **{**review, 'decision':'retry_allowed',
+                             'points':None, 'reason':'Authorize retake'}).status_code, 200)
+        self.assertEqual(case.post(sources+'/submissions', self.payload(version=7, response='Retry'), 'alice').status_code, 201)
+        self.assertEqual(self.command(work, 'review', 8, **{**review, 'attempt_no':2, 'points':6}).status_code, 200)
+        retake = {**fields, 'attempt_no':2, 'expected_result_version':2}
+        self.assertEqual(self.command(work, 'publish_brs', 9, **retake).status_code, 422)
+        self.assertEqual(case.post(brs_path+'/2/submission', {}, 'teacher').status_code, 200)
+        self.assertEqual(self.command(work, 'publish_brs', 9, **retake).status_code, 200)
+        result = case.clients['alice'].get(f'/api/v1/me/brs/courses/{course}/results').json()
+        self.assertEqual(result['combined_points'], 7)  # Existing highest policy prefers corrected attempt 1.
+        self.assertEqual(case.clients['alice'].get('/api/v1/me/gradebook').json(), before_gradebook)
+        with connection(case.settings) as db:
+            records = db.execute("""SELECT a.actor_id,a.version,a.created_at,v.published_at
+                FROM staff_audit a JOIN coursework_brs_sources s ON s.version_id=a.resource_id
+                JOIN brs_attempt_versions v ON v.id=s.version_id
+                WHERE a.action='brs.attempt.coursework' AND a.resource_kind='brs_attempt_version'
+                ORDER BY a.version""").fetchall()
+            self.assertEqual([tuple(row) for row in records],
+                             [('teacher', number, case.now, case.now) for number in range(1, 4)])
+        self.assertEqual(self.command(work, 'review', 10, **{**review, 'attempt_no':2, 'points':5,
+                             'reason':'Corrected calculation'}).status_code, 200)
+        self.assertEqual(case.post(f'{foundation.ADMIN}/grants/{self.grant}/revoke', {}).status_code, 200)
+        self.assertEqual(case.post(commands, payload, 'teacher').status_code, 404)
+        pending = {**retake, 'review_revision':2, 'expected_result_version':3}
+        self.assertEqual(self.command(work, 'publish_brs', 11, **pending).status_code, 404)
+        self.assertEqual(case.count('brs_attempt_versions'), 3)
+
+    def reviewed_work(self):
+        work = self.create()
+        course = self.enrollment['course_id']
+        self.assertEqual(self.command(work, 'publish', 1, event_code='e').status_code, 200)
+        self.assertEqual(self.case.post(f'{STUDENT}/{work}/submissions',
+                                       self.payload(response='Answer'), 'alice').status_code, 201)
+        self.assertEqual(self.command(work, 'review', 2, course_id=course, attempt_no=1,
+                                      decision='reviewed', comment='Checked', points=8).status_code, 200)
+        return work, course
+
+    def insert_unchecked_publication(self, db, work, course, actor):
+        db.execute("""INSERT INTO brs_event_results
+            SELECT 'fake-result',?,plan_id,'e' FROM brs_offerings WHERE id=?""", (course, self.flow))
+        db.execute("INSERT INTO coursework_brs_sources VALUES ('fake-version',?,?,1,1)", (work, course))
+        db.execute("""INSERT INTO brs_attempt_versions
+            VALUES ('fake-version','fake-result',?,1,1,1,8,?,?,NULL)""",
+                   (self.enrollment['id'], actor, self.case.now))
+
+    def test_coursework_replay_requires_current_enrollment_with_an_active_grant(self):
+        work, course = self.reviewed_work()
+        payload = self.payload(3, action='publish_brs', data={
+            'course_id':course, 'attempt_no':1, 'review_revision':1, 'expected_result_version':0,
+        })
+        endpoint = f'{STAFF}/{work}/commands'
+        self.assertEqual(self.case.post(endpoint, payload, 'teacher').status_code, 200)
+        with connection(self.case.settings, write=True) as db:
+            db.execute("UPDATE brs_enrollments SET ends_on='2027-02-02' WHERE id=?", (self.enrollment['id'],))
+        access = f'/api/v1/staff/brs/offerings/{self.flow}/access'
+        self.assertEqual(self.case.clients['teacher'].get(access).status_code, 200)
+        self.assertEqual(self.case.post(endpoint, payload, 'teacher').status_code, 404)
+        self.assertEqual(self.case.count('brs_attempt_versions'), 1)
+
+    def test_missing_audit_rolls_back_publication_and_allows_retry(self):
+        work, course = self.reviewed_work()
+        case = self.case
+        payload = self.payload(3, action='publish_brs', data={
+            'course_id':course, 'attempt_no':1, 'review_revision':1, 'expected_result_version':0,
+        })
+        endpoint = f'{STAFF}/{work}/commands'
+        with connection(case.settings, write=True) as db:
+            db.execute("""CREATE TRIGGER simulate_lost_audit BEFORE INSERT ON staff_audit
+                WHEN NEW.action='brs.attempt.coursework' BEGIN SELECT RAISE(IGNORE); END""")
+        denied = case.post(endpoint, payload, 'teacher')
+        self.assertEqual(denied.status_code, 503, denied.text)
+        for table in ('brs_event_results', 'brs_attempt_versions', 'coursework_brs_sources'):
+            self.assertEqual(case.count(table), 0)
+        with connection(case.settings, write=True) as db:
+            self.assertEqual(db.execute('SELECT version FROM coursework_recipients WHERE assignment_id=? AND course_id=?',
+                                        (work, course)).fetchone()[0], 3)
+            self.assertIsNone(db.execute("SELECT 1 FROM staff_audit WHERE action='brs.attempt.coursework'").fetchone())
+            self.assertIsNone(db.execute('SELECT 1 FROM coursework_receipts WHERE request_key=?',
+                                         (payload['request_key'],)).fetchone())
+            db.execute('DROP TRIGGER simulate_lost_audit')
+        self.assertEqual(case.post(endpoint, payload, 'teacher').status_code, 200)
+        self.assertEqual(case.count('brs_attempt_versions'), 1)
+
+    def test_upgrade_from_0021_requires_and_preserves_publication_audit(self):
+        work, course = self.reviewed_work()
+        path = self.case.settings.database
+        previous = '0022_coursework_brs_authorization'
+        release = '0023_coursework_brs_server_audit'
+        with closing(sqlite3.connect(path)) as db, db:
+            # Recreate the exact 0021 schema in this test's private database.
+            db.execute('DELETE FROM schema_migrations WHERE id IN (?,?)', (previous, release))
+            self.insert_unchecked_publication(db, work, course, 'teacher')
+        self.assertEqual(status(path)['pending'], [previous, release])
+        with self.assertRaisesRegex(MigrationError, previous):
+            update(path, backup=path.with_name('before-missing-audit.sqlite3'))
+        self.assertEqual(status(path)['pending'], [previous, release])
+        with closing(sqlite3.connect(path)) as db, db:
+            self.assertEqual(db.execute('SELECT count(*) FROM coursework_brs_sources').fetchone()[0], 1)
+            db.execute("""INSERT INTO staff_audit VALUES
+                ('legacy-audit','teacher','brs.attempt.coursework','brs_attempt_version','fake-version',1,?)""",
+                       (self.case.now,))
+        direct = path.with_name('direct-from-0021.sqlite3')
+        verified_backup(path, direct)
+        self.assertEqual(update(direct, backup=path.with_name('before-direct-0021.sqlite3'))['applied'][-1], release)
+
+        prefix = path.with_name('through-0022')
+        prefix.mkdir()
+        for sql in sorted(DIRECTORY.glob('*.sql'))[:-1]:
+            shutil.copyfile(sql, prefix / sql.name)
+        self.assertEqual(update(path, backup=path.with_name('before-0022.sqlite3'), directory=prefix)['applied'][-1], previous)
+        self.assertEqual(status(path)['pending'], [release])
+        self.assertEqual(update(path, backup=path.with_name('before-0023.sqlite3'))['applied'][-1], release)
+        self.assertEqual(update(path)['pending'], [])
+        with closing(sqlite3.connect(path)) as db:
+            self.assertEqual(db.execute('SELECT points FROM brs_attempt_versions').fetchall(), [(8,)])
+            self.assertEqual(db.execute("SELECT id FROM staff_audit WHERE resource_id='fake-version'").fetchall(),
+                             [('legacy-audit',)])
+            self.assertEqual(db.execute('PRAGMA integrity_check').fetchall(), [('ok',)])
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+            self.assertIsNone(db.execute("SELECT 1 FROM sqlite_master WHERE sql LIKE '%mgimov_coursework_publication%'").fetchone())
 
     def test_http_lifecycle_replays_versions_lateness_and_review_history(self):
         teacher = self.case.clients['teacher']

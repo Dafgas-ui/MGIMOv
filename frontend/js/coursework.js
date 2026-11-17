@@ -133,6 +133,36 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
     line(parent,t('Срок','Due')+' · '+date(work.due_at));
     line(parent,label(grading,work.grading_mode)+(work.max_points==null?'':' · '+t('Максимум','Maximum')+' '+work.max_points));
   }
+  function files(parent, list=[]) {
+    for(const file of list){
+      const link=node('a',file.name);
+      link.href='/api/v1/'+(owner.role==='student'?'me':'staff')+'/coursework/files'+path(file.id);
+      const row=node('p');row.append(link);parent.append(row);
+    }
+  }
+  function fileInput(form, label) {
+    const wrapper=node('label',label), input=node('input');
+    input.type='file';input.multiple=true;input.accept='.txt,.md';
+    wrapper.append(input);form.append(wrapper);
+    return input;
+  }
+  async function readFiles(input, send) {
+    const current=epoch, session=sessionEpoch, selected=[...input.files];
+    if(selected.length>2||selected.some(file=>file.size<1||file.size>65536||!(/\.(txt|md)$/i).test(file.name))){
+      say(t('Выберите до двух файлов TXT или MD по 64 КиБ.','Choose up to two TXT or MD files, 64 KiB each.'),'error');return;
+    }
+    let attachments;
+    try {
+      attachments=await Promise.all(selected.map(async file=>{
+        let bytes='';for(const byte of new Uint8Array(await file.arrayBuffer()))bytes+=String.fromCharCode(byte);
+        return {name:file.name,content:btoa(bytes)};
+      }));
+    }catch{
+      if(current===epoch&&session===sessionEpoch)say(t('Не удалось прочитать файл.','Could not read the file.'),'error');
+      return;
+    }
+    if(current===epoch&&session===sessionEpoch&&ready&&active)send(attachments);
+  }
   function pill(parent,value) {
     const badge=node('span',label(states,value)||t('Сдач пока нет','No submissions yet'),'coursework-pill');
     if(Object.hasOwn(states,value))badge.dataset.state=value;
@@ -148,6 +178,7 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
       line(item,attempt.method==='in_person'?t('Очная сдача','In-person submission'):t('Текстовая сдача','Text submission'));
       if(attempt.late)line(item,t('Сдано с опозданием, без автоматического штрафа.','Submitted late, without an automatic penalty.'),'coursework-late');
       if(attempt.response!=null)line(item,attempt.response,'coursework-text');
+      files(item,data.files?.filter(file=>file.attempt_no===attempt.number));
       for(const review of data.reviews.filter(entry=>entry.attempt_no===attempt.number)){
         const entry=node('div',undefined,'coursework-review');
         pill(entry,review.decision);
@@ -159,6 +190,9 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
       }
       list.append(item);
     }
+    for(const publication of data.brs_publications||[])
+      line(parent,t(`БРС · попытка ${publication.brs_attempt_no} · версия ${publication.revision_no} · баллы ${publication.points}`,
+        `BRS · attempt ${publication.brs_attempt_no} · revision ${publication.revision_no} · points ${publication.points}`));
   }
   function renderList() {
     const staff=owner.role==='staff';
@@ -199,6 +233,7 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
     const layout=node('div',undefined,'coursework-split'), summary=node('div'), submission=node('div');
     summary.append(node('h3',work.title));metadata(summary,work);pill(summary,work.latest_attempt_state);
     line(summary,work.description,'coursework-text');
+    files(summary,work.materials);
     if(work.can_submit_text) {
       const {form,finish}=formFor(submission,'submit:'+work.id,t('Текстовая сдача','Text submission'),
         work.can_resubmit?t('Сдать повторно','Resubmit'):t('Отправить работу','Submit work'), values=>{
@@ -206,9 +241,12 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
             say(t('Введите от 1 до 4000 кодовых точек без нулевых символов.',
                   'Enter 1–4000 code points with no null characters.'),'error');return;
           }
-          mutate(path(work.id)+'/submissions','POST',{expected_version:work.recipient_version,response:values.response});
+          readFiles(attachments, selected=>mutate(path(work.id)+'/submissions'+(selected.length?'/with-files':''),'POST',{
+            expected_version:work.recipient_version,response:values.response,...(selected.length?{files:selected}:{})
+          }));
         });
       const input=field(form,'response',t('Текст работы','Your response'),{type:'textarea'});
+      const attachments=fileInput(form,t('Вложения к сдаче (TXT, MD)','Submission attachments (TXT, MD)'));
       const count=node('small');form.append(count);
       const update=()=>{count.textContent=unicodeLength(input.value)+' / 4000';};
       input.addEventListener('input',update);update();finish();
@@ -260,16 +298,43 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
   function staffDetail(work,details) {
     content.append(node('h3',work.title));metadata(content,work);pill(content,work.status);
     line(content,work.description,'coursework-text');
-    if(work.status==='draft'){draftForm(work);publishForm(work);return;}
+    files(content,work.materials);
+    if(work.status==='draft'){
+      draftForm(work);
+      if((work.materials?.length||0)<2){
+        const {form,finish}=formFor(content,'materials:'+work.id,t('Материалы задания','Assignment materials'),
+          t('Добавить материалы','Add materials'),()=>readFiles(input, selected=>{
+            if(selected.length)mutate(path(work.id)+'/materials','POST',{expected_version:work.version,files:selected});
+          }));
+        const input=fileInput(form,t('Файлы материалов (TXT, MD)','Material files (TXT, MD)'));
+        input.required=true;finish();
+      }
+      publishForm(work);return;
+    }
     line(content,t('Ожидают проверки','Awaiting review')+': '+work.queue.awaiting_review+' · '+t('Сдали','Submitted')+': '+work.queue.submitted);
     if(!work.recipients.length)line(content,t('Получателей нет.','No recipients.'));
     const recipients=node('div',undefined,'coursework-actions');content.append(recipients);
     for(const item of work.recipients)button(recipients,item.student_name,()=>select(work.id,item.course_id));
     if(!details)return;
     content.append(node('h3',details.student_name));history(content,details);
+    if(details.can_record_in_person){
+      const {finish}=formFor(content,'in-person:'+work.id+':'+details.course_id,
+        t('Очная сдача','In-person submission'),t('Зарегистрировать очную сдачу','Record in-person submission'),
+        ()=>command(work,'record_in_person',details.recipient_version,{course_id:details.course_id}));
+      finish();
+    }
     const attempt=details.attempts.at(-1);
     if(!attempt)return;
     const latest=details.reviews.filter(review=>review.attempt_no===attempt.number).at(-1);
+    const published=details.brs_publications?.some(entry=>entry.attempt_no===attempt.number&&entry.review_revision===latest?.revision);
+    if(work.grading_mode==='brs'&&latest?.decision==='reviewed'&&latest.points!=null&&!published){
+      const {finish}=formFor(content,'brs:'+work.id+':'+details.course_id,t('Подтверждение баллов БРС','Confirm BRS points'),
+        t('Опубликовать баллы в БРС','Publish points to BRS'),()=>command(work,'publish_brs',details.recipient_version,{
+          course_id:details.course_id,attempt_no:attempt.number,review_revision:latest.revision,
+          expected_result_version:details.brs_result_version
+        }));
+      finish();
+    }
     const {form,finish}=formFor(content,'review:'+work.id+':'+details.course_id,t('Проверка и возврат','Review and return'),
       t('Сохранить решение','Save decision'),values=>{
         const data={course_id:details.course_id,attempt_no:attempt.number,decision:values.decision,comment:values.comment};
@@ -300,8 +365,7 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
     else if(!view.work)renderList();
     else if(owner.role==='student')studentDetail(view.work);
     else staffDetail(view.work,view.history);
-    line(content,t('PDF-сдача, публикация баллов в БРС и пересмотр деканатом пока недоступны.',
-                   'PDF submissions, publishing scores to BRS and dean’s office reviews are currently unavailable.'),'coursework-note');
+    line(content,t('Пересмотр деканатом пока недоступен.','Dean’s office reviews are currently unavailable.'),'coursework-note');
   }
   refresh.addEventListener('click',()=>load());
   document.addEventListener('mgimov:language',()=>{

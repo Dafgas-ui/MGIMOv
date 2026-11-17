@@ -1,9 +1,10 @@
 """Session-protected HTTP adapter for coursework services."""
 import sqlite3
 from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import Field, StringConstraints
 
 from . import coursework
@@ -40,12 +41,25 @@ class Submission(Versioned):
     response: str = Field(max_length=4000)
 
 
+class Attachment(Strict):
+    name: str = Field(max_length=80)
+    content: str = Field(max_length=87384)
+
+
+class Materials(Versioned):
+    files: list[Attachment] = Field(min_length=1, max_length=2)
+
+
+class FileSubmission(Submission, Materials):
+    pass
+
+
 class DraftEdit(Versioned):
     data: dict
 
 
 class StaffCommand(DraftEdit):
-    action: Literal['publish', 'copy', 'record_in_person', 'review']
+    action: Literal['publish', 'copy', 'record_in_person', 'review', 'publish_brs']
 
 
 async def published_result_conflict(request, error):
@@ -79,7 +93,7 @@ def install_coursework(app, settings):
                 now = int(app.state.auth_service.clock())
                 actor = identity(db, now)
                 if not db.execute("""SELECT 1 FROM schema_migrations
-                    WHERE id='0019_coursework_parent_guards'""").fetchone():
+                    WHERE id='0023_coursework_brs_server_audit'""").fetchone():
                     fail(503, 'Требуется обновление схемы учебных работ.')
                 return action(db, actor, now, *args)
         except sqlite3.IntegrityError as error:
@@ -99,6 +113,33 @@ def install_coursework(app, settings):
         return run(request, 'student', lambda db, actor, now: coursework.execute(
             db, actor, now, assignment_id, 'submit_text', expected_version=body.expected_version,
             request_key=body.request_key, data={'response': body.response}), write=True)
+
+    @router.post('/me/coursework/{assignment_id}/submissions/with-files', status_code=201)
+    def submit_files(assignment_id: Key, body: FileSubmission, request: Request):
+        return run(request, 'student', lambda db, actor, now: coursework.execute(
+            db, actor, now, assignment_id, 'submit_text', expected_version=body.expected_version,
+            request_key=body.request_key, data=body.model_dump(include={'response', 'files'})), write=True)
+
+    @router.post('/staff/coursework/{assignment_id}/materials')
+    def materials(assignment_id: Key, body: Materials, request: Request):
+        return run(request, 'staff', lambda db, actor, now: coursework.execute(
+            db, actor, now, assignment_id, 'attach_materials', expected_version=body.expected_version,
+            request_key=body.request_key, data=body.model_dump(include={'files'})), write=True)
+
+    def download(request, role, file_id):
+        name, content = run(request, role, coursework.download_file, file_id)
+        return Response(content, media_type='application/octet-stream', headers={
+            'Content-Disposition': "attachment; filename*=UTF-8''" + quote(name, safe=''),
+            'Content-Security-Policy': 'sandbox',
+        })
+
+    @router.get('/me/coursework/files/{file_id}')
+    def student_file(file_id: Key, request: Request):
+        return download(request, 'student', file_id)
+
+    @router.get('/staff/coursework/files/{file_id}')
+    def staff_file(file_id: Key, request: Request):
+        return download(request, 'staff', file_id)
 
     @router.get('/staff/coursework')
     def staff_list(request: Request, filters: Annotated[WorkFilters, Query()]):

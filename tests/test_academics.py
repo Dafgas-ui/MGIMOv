@@ -145,7 +145,7 @@ class AcademicTests(unittest.TestCase):
             path=root/'upgrade.sqlite3';update(path,create=True,directory=definitions)
             with connection(Settings(path),write=True) as db:db.execute("INSERT INTO app_metadata VALUES ('preserve-v4','yes')")
             backup=root/'backup.sqlite3';update(path,backup=backup)
-            self.assertIn('0004_academics',status(path)['applied']);self.assertEqual(status(path)['applied'][-1],'0019_coursework_parent_guards');self.assertTrue(backup.exists())
+            self.assertIn('0004_academics',status(path)['applied']);self.assertEqual(status(path)['applied'][-1],'0023_coursework_brs_server_audit');self.assertTrue(backup.exists())
             with connection(Settings(path)) as db:
                 self.assertEqual(db.execute("SELECT value FROM app_metadata WHERE key='preserve-v4'").fetchone()[0],'yes')
                 self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])

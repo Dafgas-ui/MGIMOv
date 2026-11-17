@@ -1160,3 +1160,59 @@ Linux CLI и доставка уведомления — NOT VERIFIED. Расп�
 
 Полная Windows-регрессия `python -B -m unittest discover -s tests -q` —
 203 PASS, 0 FAIL, 0 ERROR, 0 SKIP. `git diff --check` — exit 0.
+
+## Coursework V
+
+Этап 1, рабочее дерево поверх `070d324`. Windows HTTP Coursework — 8/8,
+целевые JS — 5/5, Chrome Coursework — 7/7. Лабораторная и контрольная
+прошли очную сдачу, возврат, текстовую пересдачу и выставление баллов.
+Отдельный HTTP-тест проверил версию получателя, повтор команды и отказ
+чужому студенту и преподавателю без полномочий.
+
+Этап 2. Coursework HTTP и BRS foundation — 28/28, JS Coursework — 5/5,
+Chrome Coursework — 7/7. Оба типа прошли загрузку материала, скачивание
+и текстовую пересдачу с файлом. Backup/restore и два rollback — 1/1 в
+приватной Windows-копии: вложение скачал владелец, чужая сессия получила 404.
+Промежуточная полная Windows-регрессия `python -B -m unittest discover -s tests -q`
+до этапа 3 — 205/205.
+
+Этап 3. Целевые Coursework, БРС и аттестации — 50/50. Отдельно повторён
+HTTP-сценарий публикации, исправления и пересдачи на итоговом коде — 1/1.
+Обычная публикация в зарезервированную область отклонена. Пересдача требует
+штатной регистрации, `highest` сохраняет лучший балл, зачётка сохраняет
+официальную оценку. Полная JS-регрессия `npm test` — 84/84. Полный Chrome
+Playwright `playwright test` — 19/19, в том числе 8/8 Coursework.
+Итоговая Windows-регрессия `python -B -m unittest discover -s tests -q`
+в приватной копии с синтетическими SQLite — 206/206, exit 0 (570.631 с).
+`git diff --check` — exit 0. Эксплуатационная проверка Linux — NOT VERIFIED.
+
+### Повторная проверка Coursework V после замечания Luna
+
+Windows, рабочее дерево поверх `070d324`. На 0021 воспроизведена прямая
+вставка с автором без назначения и без аудита. На 0022 целевой запуск
+`python -B -m unittest tests.test_coursework_http tests.test_brs_results -q` —
+27/27, exit 0. Проверены отказ без функции соединения при разных PRAGMA,
+атомарный откат при пропуске записи аудита, конкурентное исправление,
+идемпотентность, отзыв назначения и сохранение проверенных записей 0021.
+`npm test` — 84/84, exit 0. Chrome `playwright test coursework.spec.js` —
+8/8, exit 0. Артефакты — `.tmp/coursework-v-luna-chrome`.
+Отдельная команда `python -B -m unittest -v tests.test_recovery_rehearsal`
+в приватной копии — 1/1, exit 0. Проверены CLI backup и restore, запуск
+FastAPI из копии и два отката. Использовались только синтетические SQLite.
+Полная Windows-регрессия `python -B -m unittest discover -s tests -q`
+в приватной копии — 209/209, exit 0 (391.997 с). `git diff --check` — exit 0.
+
+### Coursework V — серверный аудит, схема 0023
+
+Windows, рабочее дерево поверх `070d324`. `python -B -m unittest
+tests.test_coursework_http tests.test_brs_results -q` — 28/28, exit 0.
+Проверены чистая схема 0023, обновление заполненных 0021 и 0022, защита
+штатного API, включая актуальное зачисление до возврата повтора, конкурентные
+команды и откат при пропуске аудита обычного БРС и Coursework.
+`npm test` — 84/84, exit 0. Chrome `playwright test coursework.spec.js` —
+8/8, exit 0. Артефакты — `.tmp/coursework-v-server-audit-chrome`.
+`python -B -m unittest -v tests.test_recovery_rehearsal` в отдельной приватной
+копии — 1/1, exit 0. Пройдены backup, restore, FastAPI и два отката.
+Полная Windows-регрессия `python -B -m unittest discover -s tests -q`
+в приватной копии — 210/210, exit 0 (360.403 с). `git diff --check` — exit 0.
+Права Linux под разными учётными записями и Nginx — NOT VERIFIED.

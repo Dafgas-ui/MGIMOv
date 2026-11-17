@@ -58,9 +58,10 @@ const test=base.extend({coursework:async ({browser,request},use)=>{
   }
 }});
 
-async function createDraft(staff,title='Синтетическая работа') {
+async function createDraft(staff,title='Синтетическая работа',kind='lab') {
     await staff.getByRole('button',{name:'Создать черновик'}).click();
     await staff.getByLabel('Название').fill(title);
+    await staff.getByLabel('Тип работы').selectOption(kind);
     await staff.getByLabel('Условия задания').fill('Проверьте сценарий');
     await staff.getByLabel('Срок (МСК)').fill('2027-02-21T12:00');
     await staff.getByRole('button',{name:'Сохранить черновик'}).click();
@@ -81,10 +82,10 @@ test('coursework staff draft, publish, student Unicode submission, return and re
     const stale=await open('alice',390);
     await stale.getByRole('button',{name:'Открыть задание'}).click();
     await stale.getByLabel('Текст работы').fill('Черновик из другой вкладки');
+    await expect(student.locator('input[type=file]')).toHaveAttribute('accept','.txt,.md');
     await student.getByLabel('Текст работы').fill('Проверка 😀');
     await student.getByRole('button',{name:'Отправить работу'}).click();
     await expect(student.getByText('Проверка 😀',{exact:true})).toBeVisible();
-    await expect(student.locator('input[type=file]')).toHaveCount(0);
     expect(await student.page().evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await stale.getByRole('button',{name:'Отправить работу'}).click();
     await expect(stale.getByRole('status')).toHaveAttribute('data-state','conflict');
@@ -116,6 +117,91 @@ test('coursework staff draft, publish, student Unicode submission, return and re
     const outsider=await open('bobby',390);
     await expect(outsider.getByText('В этом списке пока нет работ.')).toBeVisible();
     await outsider.screenshot({path:info.outputPath('coursework-empty.png')});
+});
+
+for(const kind of ['lab','test']){
+  test(`Coursework ${kind}: return an in-person attempt, resubmit text, review for points`, async ({coursework:{open}})=>{
+    const staff=await open('teacher',1280);
+    await createDraft(staff,'Смешанная работа',kind);
+    await staff.getByLabel('Файлы материалов (TXT, MD)').setInputFiles({
+      name:'guide.txt',mimeType:'text/plain',buffer:Buffer.from('Synthetic material')
+    });
+    await staff.getByRole('button',{name:'Добавить материалы'}).click();
+    await expect(staff.getByRole('link',{name:'guide.txt'})).toBeVisible();
+    await staff.getByLabel('Режим оценивания').selectOption('independent');
+    await staff.getByLabel('Максимум баллов').fill('10');
+    await staff.getByRole('button',{name:'Опубликовать задание'}).click();
+    const recipient=staff.getByRole('button',{name:'alice',exact:true});
+    await recipient.click();
+    const record=staff.getByRole('button',{name:'Зарегистрировать очную сдачу'});
+    await record.click();
+    await expect(record).toHaveCount(0);
+    await staff.getByLabel('Решение').selectOption('returned');
+    await staff.getByLabel('Комментарий').fill('Дополните ответ');
+    await staff.getByRole('button',{name:'Сохранить решение'}).click();
+    await expect(record).toBeVisible();
+
+    const student=await open('alice',390);
+    await student.getByRole('button',{name:'Открыть задание'}).click();
+    const material=student.getByRole('link',{name:'guide.txt'});
+    await expect(material).toBeVisible();
+    const [download]=await Promise.all([student.page().waitForEvent('download'),material.click()]);
+    await expect(download.suggestedFilename()).toBe('guide.txt');
+    await student.getByLabel('Текст работы').fill('Синтетический ответ');
+    await student.getByLabel('Вложения к сдаче (TXT, MD)').setInputFiles({
+      name:'answer.md',mimeType:'text/markdown',buffer:Buffer.from('Synthetic answer')
+    });
+    await student.getByRole('button',{name:'Сдать повторно'}).click();
+    await expect(student.getByText('Синтетический ответ',{exact:true})).toBeVisible();
+    await staff.getByRole('button',{name:'Обновить',exact:true}).click();
+    await expect(staff.getByText('Синтетический ответ',{exact:true})).toBeVisible();
+    await expect(staff.getByRole('link',{name:'answer.md'})).toBeVisible();
+    await staff.getByLabel('Баллы',{exact:true}).fill('8');
+    await staff.getByLabel('Комментарий').fill('Результат проверен');
+    await staff.getByRole('button',{name:'Сохранить решение'}).click();
+    await expect(staff.getByText('Результат проверен',{exact:true})).toBeVisible();
+    await expect(record).toHaveCount(0);
+    await student.getByRole('button',{name:'Обновить',exact:true}).click();
+    await expect(student.getByText('Результат проверен',{exact:true})).toBeVisible();
+    await expect(student.getByText('Дополните ответ',{exact:true})).toBeVisible();
+    await expect(student.getByText('Баллы · 8',{exact:true})).toBeVisible();
+    const outsider=await open('bobby',390);
+    await expect(outsider.getByText('В этом списке пока нет работ.')).toBeVisible();
+  });
+}
+
+test('Staff publishes and corrects a reviewed Coursework score in BRS explicitly', async ({coursework:{open}})=>{
+  const staff=await open('teacher',1280);
+  await createDraft(staff,'Контрольная с БРС','test');
+  await staff.getByLabel('Режим оценивания').selectOption('brs');
+  await staff.getByLabel('Код мероприятия БРС').fill('e');
+  await staff.getByRole('button',{name:'Опубликовать задание'}).click();
+  const student=await open('alice',390);
+  await student.getByRole('button',{name:'Открыть задание'}).click();
+  await student.getByLabel('Текст работы').fill('Тестовый ответ БРС');
+  await student.getByRole('button',{name:'Отправить работу'}).click();
+  await expect(student.getByText('Тестовый ответ БРС',{exact:true})).toBeVisible();
+
+  await staff.getByRole('button',{name:'Обновить',exact:true}).click();
+  await staff.getByRole('button',{name:'alice',exact:true}).click();
+  const publish=staff.getByRole('button',{name:'Опубликовать баллы в БРС'});
+  await staff.getByLabel('Баллы',{exact:true}).fill('8');
+  await staff.getByLabel('Комментарий').fill('Проверено');
+  await staff.getByRole('button',{name:'Сохранить решение'}).click();
+  await expect(publish).toBeVisible();
+  await expect(staff.getByText(/БРС · попытка 1 · версия 1/)).toHaveCount(0);
+  await publish.click();
+  await expect(staff.getByText('БРС · попытка 1 · версия 1 · баллы 8',{exact:true})).toBeVisible();
+  await expect(publish).toHaveCount(0);
+  await staff.getByLabel('Баллы',{exact:true}).fill('7');
+  await staff.getByLabel('Комментарий').fill('Уточнённый результат');
+  await staff.getByLabel('Основание новой версии').fill('Пересчитан критерий');
+  await staff.getByRole('button',{name:'Сохранить решение'}).click();
+  await publish.click();
+  await expect(staff.getByText('БРС · попытка 1 · версия 2 · баллы 7',{exact:true})).toBeVisible();
+  await student.getByRole('button',{name:'Обновить',exact:true}).click();
+  await expect(student.getByText('БРС · попытка 1 · версия 1 · баллы 8',{exact:true})).toBeVisible();
+  await expect(student.getByText('БРС · попытка 1 · версия 2 · баллы 7',{exact:true})).toBeVisible();
 });
 
 async function observeSubmissionCompletion(page) {
