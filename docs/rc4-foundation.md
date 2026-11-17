@@ -202,20 +202,48 @@ pid=$(systemctl show -p MainPID --value mgimov.service) && test "$pid" -gt 0 && 
 в `--db`. На Linux CLI требует совпадения путей, отвергает SQLite из
 проектного `.tmp` и использует только выделенный закрытый каталог.
 Перед расписанием выполните ту же команду вручную от пользователя задания.
-Время запуска соответствует часовому поясу cron на VPS.
+Время расписания соответствует часовому поясу cron на VPS, а дата комплекта
+определяется по UTC. Убедитесь, что оба запуска относятся к одной UTC-дате и
+что второе задание запускается после штатного предела времени первого.
+
+Команда проверки свежести читает только опубликованный комплект ровно за
+ожидаемую UTC-дату. По умолчанию проверяется текущая дата UTC. `--date
+YYYY-MM-DD` позволяет явно проверить выбранный день. Проверяются SHA-256,
+целостность SQLite, внешние ключи, схема и контрольные суммы миграций
+текущего релиза. Staging, карантин и старые комплекты не заменяют ожидаемую
+копию. Exit 0 означает, что комплект проверен. Exit 1 означает ошибку или
+отсутствие комплекта. Exit 2 означает ошибку аргументов. Вывод содержит
+только UTC-дату и общую категорию результата.
+
+```powershell
+& .\.venv\Scripts\python.exe -B -m backend.commands.check_backup --directory "$backupDir" --date 2026-11-16
+```
+
+Пример для будущего использования. `local-admin` заменяется существующим
+локальным получателем после проверки доставки. Каждое задание помещается
+в одну строку crontab. Журнал получает вывод команды, а cron получает только
+фиксированный текст при ошибке. `pipefail` сохраняет отказ команды при
+успешном выполнении `logger`.
 
 ```cron
 MGIMOV_DB_PATH=/absolute/confirmed/service-database.sqlite3
-0 3 * * * /bin/bash -o pipefail -c '(cd /opt/mgimov/app && timeout --kill-after=15s 10m .venv/bin/python -B -m backend.commands.backup_database --production --db "/absolute/confirmed/service-database.sqlite3" --directory /opt/mgimov/backups/daily --keep-successful 7 --max-bytes 1073741824) 2>&1 | logger -t mgimov-backup'
+MAILTO=local-admin
+0 3 * * * /bin/bash -o pipefail -c '(cd /opt/mgimov/app && timeout --kill-after=15s 10m .venv/bin/python -B -m backend.commands.backup_database --production --db "/absolute/confirmed/service-database.sqlite3" --directory /opt/mgimov/backups/daily --keep-successful 7 --max-bytes 1073741824) 2>&1 | logger -t mgimov-backup >/dev/null 2>&1 || { printf "MGIMOv backup job failed\n"; exit 1; }'
+30 3 * * * /bin/bash -o pipefail -c '(cd /opt/mgimov/app && timeout --kill-after=15s 5m .venv/bin/python -B -m backend.commands.check_backup --directory /opt/mgimov/backups/daily) 2>&1 | logger -t mgimov-backup-check >/dev/null 2>&1 || { printf "MGIMOv daily backup freshness check failed\n"; exit 1; }'
 ```
 
-Журнал содержит класс ошибки и errno. Независимо проверяйте свежесть снимка
-с контрольной суммой. Файл блокировки остаётся на месте, блокировка снимается
+Проверка свежести должна выполняться отдельным заданием, чтобы обнаруживать
+также пропущенный запуск backup. Linux cron и доставка локального письма —
+NOT VERIFIED. Если почта недоступна, теги `mgimov-backup` и
+`mgimov-backup-check` пригодны для существующего локального мониторинга;
+запись в журнале сама по себе не доставляет сообщение администратору.
+Файл блокировки остаётся на месте, блокировка снимается
 ядром при завершении процесса. Старый каталог блокировки предыдущей версии
 можно убрать после проверки, что предыдущий процесс остановлен. Старые
 плоские пары и карантин проверяет оператор. Остатки учитываются в квоте.
 Параметр `--keep-days` принимается с предупреждением и означает число
-успешных комплектов. Уведомления и проверка расписания относятся к следующему этапу.
+успешных комплектов. Проверка действующего расписания на VPS требуется
+до изменения параметров ротации.
 
 Для репетиции используйте отдельную приватную копию нужного релиза и синтетический
 опубликованный комплект. Укажите абсолютный путь к ежедневному каталогу, UTC-дату
