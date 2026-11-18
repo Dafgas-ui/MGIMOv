@@ -134,9 +134,11 @@ def student_summary(row, now):
     start = result.pop('enrollment_start')
     end = result.pop('enrollment_end')
     attempted = result['latest_attempt_no'] is not None
-    text_available = now is not None and end is None and start <= date_at(now) and row['mode'] != 'in_person'
+    enrolled = now is not None and end is None and start <= date_at(now)
+    text_available = enrolled and row['mode'] != 'in_person'
     return {**result, 'latest_attempt_state': (decision or 'submitted') if attempted else None,
             'has_latest_review': decision is not None,
+            'needs_submission': enrolled and (not attempted or retry_allowed(decision)),
             'can_submit_text': text_available and (not attempted or retry_allowed(decision)),
             'can_resubmit': text_available and attempted and retry_allowed(decision)}
 

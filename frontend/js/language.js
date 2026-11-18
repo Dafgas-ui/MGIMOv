@@ -1,5 +1,12 @@
 // UI copy only. User-entered and academic text are left in their original language.
 const entries = `
+Учебные сроки|Academic dates
+Сроки сдачи и даты испытаний · МСК|Submission deadlines and assessment dates · MSK
+Загружаем сроки…|Loading dates…
+Ожидает сдачи|Awaiting submission
+Срок сдачи аттестации|Assessment deadline
+Просрочено|Overdue
+В ближайшие 3 дня|Within 3 days
 Посещаемость|Attendance
 Причина|Reason
 Статус|Status

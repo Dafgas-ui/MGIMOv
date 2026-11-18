@@ -100,6 +100,7 @@ export function mountAttestations(document,request=requestJson){
     if(!items.length)line(content,t('Назначений пока нет.','No assessments yet.'));
     for(const item of items){
       const card=element('details');
+      card.id='deadline-attestations-'+item.id;
       card.className='lesson-card';card.append(element('summary',item.subject));
       line(card,t(`Использовано попыток: ${item.used} из 3`,`Attempts used: ${item.used} of 3`));
       if(item.preview)line(card,t(`Опубликованные баллы БРС: ${item.preview.points} из 100`,
@@ -233,6 +234,9 @@ export function mountAttestations(document,request=requestJson){
         ()=>run('corrected',{review_version}));
     }
   }
+  document.addEventListener('mgimov:deadline-open',event=>{
+    if(event.detail?.page==='attestations'&&user?.role==='student')load();
+  });
   document.getElementById('attestations-retry').addEventListener('click',()=>{if(!sending){pending=null;load();}});
   document.addEventListener('mgimov:language',()=>{
     if(!user||!lastView||sending)return;

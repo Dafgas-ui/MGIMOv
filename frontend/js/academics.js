@@ -10,6 +10,7 @@ export function renderAcademics(document,root,data){
   const block=title=>{const section=node('section','','academic-block');section.append(node('h3',t(title)));root.append(section);return section;};
   function card(item){
     const e=node('article','','lesson-card');e.append(node('h4',item.subject),node('p',t(controls[item.control] || item.control)));
+    e.setAttribute('data-deadline-target',item.id);
     e.append(node('p',t(statuses[item.status] || item.status),item.status==='passed'?'lesson-time':'change-badge'));
     e.append(node('p',item.scheduled_on?t(`Дата: ${item.scheduled_on} · МСК`,`Date: ${item.scheduled_on} · MSK`):t('Дата не назначена'),'muted'));
     if(item.deadline_on)e.append(node('p',t(`Срок сдачи: ${item.deadline_on}`,`Deadline: ${item.deadline_on}`),'muted'));
@@ -56,6 +57,7 @@ export function mountAcademics(document){
     get('academics-status').textContent=t(value.state==='loading'?'Загружаем успеваемость…':value.state==='error'?value.message:'');
     if(value.state==='ready')renderAcademics(document,get('academics-content'),value.data);
   }});
+  document.addEventListener('mgimov:deadline-open',event=>{if(event.detail?.page==='academics')controller.retry();});
   get('academics-retry').addEventListener('click',()=>controller.retry());return controller;
 }
 let mounted=null;

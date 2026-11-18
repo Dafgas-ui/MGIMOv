@@ -1,5 +1,5 @@
 // Presentation state only. Roles and business permissions always come from the server.
-export const studentPages=[['home','Главная'],['schedule','Расписание'],['academics','Зачётка'],['attestations','Аттестации'],['coursework','Учебные работы'],['requests','Обращения'],['documents','Документы'],['notifications','Уведомления'],['profile','Профиль'],['settings','Настройки']];
+export const studentPages=[['home','Главная'],['schedule','Расписание'],['academics','Зачётка'],['attestations','Аттестации'],['coursework','Учебные работы'],['deadlines','Учебные сроки'],['requests','Обращения'],['documents','Документы'],['notifications','Уведомления'],['profile','Профиль'],['settings','Настройки']];
 export const staffPages=[['queue','Очередь'],['staff-schedule','Расписание'],['attestations','Аттестации'],['coursework','Учебные работы'],['certificates','Справки'],['students','Студенты'],['history','История'],['notifications','Уведомления'],['profile','Аккаунт'],['settings','Настройки']];
 export function pagesFor(role){return role==='student'?studentPages:role==='staff'?staffPages:[['profile','Вход']];}
 export function resolvePage(page,role){return pagesFor(role).some(([id])=>id===page)?page:role==='student'?'home':role==='staff'?'queue':'profile';}

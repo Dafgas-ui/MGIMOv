@@ -373,6 +373,9 @@ export function mountCoursework(document, makeClient=createCourseworkClient) {
     refresh.textContent=t('Обновить','Refresh');
     if(ready&&active&&!sending&&!blocked)render();
   });
+  document.addEventListener('mgimov:deadline-open',event=>{
+    if(event.detail?.page==='coursework'&&typeof event.detail.id==='string'&&ready&&owner.role==='student')select(event.detail.id);
+  });
   document.addEventListener('mgimov:page',event=>{
     const next=event.detail==='coursework';
     if(active===next)return;

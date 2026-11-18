@@ -16,6 +16,8 @@ from .coursework_routes import install_coursework
 from .attendance_routes import install_attendance
 
 ASSETS = {
+    "/js/deadlines.js": ("js/deadlines.js", "text/javascript"),
+    "/js/deadlines-state.js": ("js/deadlines-state.js", "text/javascript"),
     "/js/attendance.js": ("js/attendance.js", "text/javascript"),
     "/js/coursework.js": ("js/coursework.js", "text/javascript"),
     "/js/coursework-client.js": ("js/coursework-client.js", "text/javascript"),

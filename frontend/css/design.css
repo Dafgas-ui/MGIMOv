@@ -155,4 +155,6 @@ footer { font-size:.72rem; }
   border: 1px solid var(--border);
 }
 #attendance-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+#deadlines-content [data-urgency="overdue"] { border-inline-start: 4px solid var(--danger); }
+#deadlines-content [data-urgency="soon"] { border-inline-start: 4px solid var(--warning); }
 #attendance-dialog .coursework-form { min-width: 0; }
