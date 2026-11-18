@@ -99,6 +99,10 @@ def install_attestations(app,settings):
                 fail(503,'Требуется миграция аттестаций.')
             return action(db,actor,now)
 
+    @router.get('/me/time')
+    def server_time(request:Request):
+        return run(request, lambda db,actor,now: {'server_time':now})
+
     @router.get('/me/brs/forecast')
     def forecast(request:Request):
         return run(request, student_forecasts)

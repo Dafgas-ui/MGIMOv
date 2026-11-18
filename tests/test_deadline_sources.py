@@ -21,6 +21,10 @@ class DeadlineSourceTests(unittest.TestCase):
         fixture.setUp()
         work = fixture.create()
         alice = fixture.case.clients['alice']
+        clock = alice.get('/api/v1/me/time')
+        self.assertEqual(clock.status_code,200)
+        self.assertEqual(clock.json(),{'server_time':fixture.case.now})
+        self.assertEqual(fixture.case.clients['teacher'].get('/api/v1/me/time').status_code,403)
         self.assertEqual(alice.get(source.STUDENT).json()['items'], [])
         self.assertEqual(fixture.command(work, 'publish', 1).status_code, 200)
         row, = alice.get(source.STUDENT).json()['items']

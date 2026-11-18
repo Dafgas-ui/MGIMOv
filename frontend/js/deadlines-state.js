@@ -1,8 +1,10 @@
 // Derived exclusively from the existing Student API projections.
 import {addDays} from './utils/dates.js';
 
-export function deadlineRows({coursework,attestations,gradebook},now=Date.now()) {
-  const today=gradebook.today, nearDay=addDays(today,3), rows=[];
+export function deadlineRows({coursework,attestations,gradebook},now) {
+  if(!Number.isFinite(now))throw new Error('Server time required');
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
+  const nearDay=addDays(today,3), rows=[];
   function add(row){
     const date=row.precision==='date'?row.date:new Intl.DateTimeFormat('sv-SE',{
       timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(row.at*1000));
@@ -36,7 +38,7 @@ export function deadlineRows({coursework,attestations,gradebook},now=Date.now())
   return rows.sort((a,b)=>a.date.localeCompare(b.date)||(a.at??0)-(b.at??0)||a.id.localeCompare(b.id));
 }
 
-export function createDeadlines({request,publish,expired,clock=()=>Date.now()}) {
+export function createDeadlines({request,publish,expired,clock=()=>performance.now()}) {
   let owner=null,generation=0,abort;
   return {
     clear(){generation++;abort?.abort();owner=null;publish({state:'hidden'});},
@@ -44,18 +46,48 @@ export function createDeadlines({request,publish,expired,clock=()=>Date.now()}) 
       owner=user;const current=++generation;abort?.abort();abort=new AbortController();
       if(user?.role!=='student'){publish({state:'hidden'});return;}
       publish({state:'loading'});
+      const started=clock();
+      const pending=abort;
+      const timeout=setTimeout(()=>pending.abort(),5000);
       try{
         const options={signal:abort.signal,headers:{'X-Mgimov-User':user.id}};
         const [coursework,attestations,gradebook]=await Promise.all([
           request('/api/v1/me/coursework',options),request('/api/v1/me/attestations',options),
           request('/api/v1/me/gradebook',options)]);
         if(current!==generation||owner!==user)return;
-        publish({state:'ready',items:deadlineRows({coursework,attestations,gradebook},clock())});
+        const time=await request('/api/v1/me/time',options);
+        if(current!==generation||owner!==user)return;
+        const elapsed=clock()-started;
+        if(!Number.isSafeInteger(time.server_time)||time.server_time<=0||!Number.isFinite(elapsed)||elapsed<0||elapsed>5000||pending.signal.aborted)
+          throw new Error('Fresh server time unavailable');
+        publish({state:'ready',as_of:time.server_time,items:deadlineRows({coursework,attestations,gradebook},time.server_time*1000)});
       }catch(error){
         if(current!==generation)return;
         publish({state:'error',status:error.status});
         if(error.status===401){this.clear();expired();}
-      }
+      }finally{clearTimeout(timeout);}
     }
   };
+}
+
+// One watchdog, coalesced lifecycle events, no wall-clock fallback.
+export function deadlineLifecycle({load,clear,clock=()=>performance.now(),host=globalThis}){
+  let key=null,timer=null,pending=false,epoch=0,started=-Infinity,ready=-Infinity,tick=0;
+  function stop(){key=null;epoch++;pending=false;if(timer!==null)host.clearInterval(timer);timer=null;clear();}
+  async function resume(force=false){
+    if(key===null)return;
+    const now=clock();
+    if((pending&&now-started<=5000)||(!force&&!pending&&now-ready<250))return;
+    const current=++epoch;pending=true;started=now;clear();
+    try{await load();}finally{if(current===epoch){pending=false;ready=clock();}}
+  }
+  return {stop,resume,refresh:()=>resume(true),activate(value){
+    if(value===null){stop();return;}
+    if(key!==value){stop();key=value;ready=-Infinity;}
+    if(timer===null){tick=clock();timer=host.setInterval(()=>{
+      const now=clock(),delayed=now-tick>2000;tick=now;
+      if(delayed||now-started>=30000)resume();
+    },1000);}
+    return resume();
+  }};
 }

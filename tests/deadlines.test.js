@@ -1,8 +1,66 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {deadlineRows,createDeadlines} from '../frontend/js/deadlines-state.js';
+import {deadlineRows,createDeadlines,deadlineLifecycle} from '../frontend/js/deadlines-state.js';
 
 const now=Date.parse('2027-02-20T12:00:00+03:00');
+test('whole load budget includes a slow source followed by fast time',async()=>{
+  let elapsed=0,view;
+  const controller=createDeadlines({clock:()=>elapsed,publish:v=>view=v,expired(){},request:async path=>{
+    if(path.endsWith('/coursework'))elapsed=5001;
+    return path.endsWith('/time')?{server_time:now/1000}:path.endsWith('/gradebook')?data().gradebook:{items:[]};
+  }});
+  await controller.load({id:'a',role:'student'});assert.equal(view.state,'error');assert.equal(view.items,undefined);
+});
+test('lifecycle coalesces events and clears before delayed timer or account refresh',async()=>{
+  let time=0,callback,timers=0,clears=0,loads=0,release;
+  const events=[];
+  const lifecycle=deadlineLifecycle({clock:()=>time,clear:()=>{clears++;events.push('clear');},
+    load:()=>{loads++;events.push('load');return new Promise(r=>release=r);},
+    host:{setInterval(fn){callback=fn;timers++;return 1;},clearInterval(){timers--;}}});
+  const first=lifecycle.activate('A');lifecycle.resume();lifecycle.activate('A');
+  assert.equal(loads,1);assert.equal(timers,1);release();await first;
+  time=10000;callback();assert.equal(loads,2);assert.deepEqual(events.slice(-2),['clear','load']);
+  const previous=release;lifecycle.activate('B');assert.equal(loads,3);assert.equal(timers,1);
+  previous();release();await Promise.resolve();lifecycle.stop();assert.equal(timers,0);assert.ok(clears>=4);
+});
+test('server time is authoritative across device clock offsets, refresh and failures',async()=>{
+  for(const offset of [-86400000,0,86400000]){
+    let view,tick=offset;
+    const sources=data();sources.coursework.items=[work('due','2027-02-20T12:00:01+03:00')];
+    const controller=createDeadlines({clock:()=>tick++,expired(){},publish:v=>view=v,
+      request:async path=>path.endsWith('/time')?{server_time:now/1000}:path.endsWith('/coursework')?sources.coursework:path.endsWith('/attestations')?sources.attestations:sources.gradebook});
+    await controller.load({id:'a',role:'student'});assert.equal(view.state,'ready');assert.equal(view.items[0].urgency,'soon');
+    controller.clear();assert.equal(view.state,'hidden');
+    await controller.load({id:'a',role:'student'});assert.equal(view.state,'ready');
+  }
+  for(const response of [null,{server_time:NaN},{server_time:0}]){
+    let view;const controller=createDeadlines({expired(){},publish:v=>view=v,request:async path=>{
+      if(path.endsWith('/time')){if(response===null)throw new Error('offline');return response;}
+      return path.endsWith('/gradebook')?data().gradebook:{items:[]};
+    }});
+    await controller.load({id:'a',role:'student'});assert.equal(view.state,'error');assert.equal(view.items,undefined);
+  }
+});
+
+test('server midnight and exact deadline boundaries ignore stale gradebook day',()=>{
+  const source=data();source.gradebook.exams=[{id:'day',status:'upcoming',scheduled_on:'2027-02-20',deadline_on:'2027-02-20'}];
+  source.coursework.items=[work('due','2027-02-20T23:59:59+03:00')];
+  const before=Date.parse('2027-02-20T23:59:58+03:00'),after=before+3000;
+  assert.equal(deadlineRows(source,before).find(x=>x.id==='work:due').urgency,'soon');
+  const rows=deadlineRows(source,after);
+  assert.equal(rows.find(x=>x.id==='work:due').urgency,'overdue');
+  assert.equal(rows.find(x=>x.id==='due:day').urgency,'overdue');
+  assert.ok(!rows.some(x=>x.id==='exam:day'));
+  assert.throws(()=>deadlineRows(source),/Server time/);
+});
+
+test('slow server-time response is rejected rather than using device time',async()=>{
+  let ticks=0,view;
+  const controller=createDeadlines({clock:()=>ticks++*6000,publish:v=>view=v,expired(){},request:async path=>
+    path.endsWith('/time')?{server_time:now/1000}:path.endsWith('/gradebook')?data().gradebook:{items:[]}});
+  await controller.load({id:'a',role:'student'});
+  assert.equal(view.state,'error');assert.equal(view.items,undefined);
+});
 const data=()=>({coursework:{items:[]},attestations:{items:[]},gradebook:{today:'2027-02-20',exams:[]}});
 const work=(id,at,extra={})=>({id,status:'published',needs_submission:true,due_at:Date.parse(at)/1000,
   title:'Assignment '+id,subject_name:'Math',latest_attempt_state:null,...extra});

@@ -63,6 +63,13 @@ def main():
             def controls():
                 nonlocal slot
                 for line in sys.stdin:
+                    if line.strip()=='advance-day':
+                        case.now+=86400
+                        # Keep synthetic sessions valid while moving the fixture clock.
+                        with connection(case.settings,write=True) as db:
+                            db.execute('UPDATE sessions SET expires_at=expires_at+86400')
+                        print('ok',flush=True)
+                        continue
                     with connection(case.settings,write=True) as db:
                         if line.strip() not in ('reschedule','cancel'):
                             raise ValueError('Unknown synthetic fixture command')

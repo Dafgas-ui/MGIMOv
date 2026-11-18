@@ -31,6 +31,23 @@ test('Student academic dates: real sources, links, overdue, reschedule, cancel a
     await expect(page.locator('#coursework-section').getByRole('heading',{name:'Ближайшая работа',exact:true})).toBeVisible();
     await page.goto(origin+'/#deadlines');
     await expect(root.locator('article')).toHaveCount(5);
+    // Advance past the documented 250 ms event-coalescing grace, without sleep.
+    await page.clock.runFor(300);
+    const refreshed=page.waitForResponse(response=>response.url().endsWith('/api/v1/me/time'));
+    let timeRequests=0;const countTime=req=>{if(req.url().endsWith('/api/v1/me/time'))timeRequests++;};
+    page.on('request',countTime);
+    await page.evaluate(()=>{
+      for(let i=0;i<5;i++){window.dispatchEvent(new Event('pageshow'));window.dispatchEvent(new Event('focus'));}
+      if(document.querySelectorAll('#deadlines-content article').length)throw new Error('Stale cards remain on resume');
+    });
+    await refreshed;await expect(root.locator('article')).toHaveCount(5);
+    expect(timeRequests).toBe(1);page.off('request',countTime);
+    for(const offset of [-86400000,86400000,0]){
+      await page.clock.setSystemTime(new Date(now*1000+offset));
+      await root.getByRole('button',{name:'Обновить',exact:true}).click();
+      await expect(root.locator('article')).toHaveCount(5);
+      await expect(root.getByText('Просрочено',{exact:true})).toHaveCount(1);
+    }
     const exam=root.locator('article').filter({has:page.getByRole('heading',{name:'Math',exact:true})}).filter({hasText:'Дата испытания'});
     await expect(exam).toContainText('25 февраля');
     await control('reschedule');await root.getByRole('button',{name:'Обновить',exact:true}).click();
@@ -43,6 +60,19 @@ test('Student academic dates: real sources, links, overdue, reschedule, cancel a
     await expect(exam).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
     await page.screenshot({path:info.outputPath('deadlines-student-390.png')});
+    // Controlled lifecycle events; real routes and a server-clock advance.
+    await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+    await expect(root.locator('article')).toHaveCount(0);
+    await control('advance-day');
+    await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+    await expect(root.getByText('Просрочено',{exact:true})).toHaveCount(2);
+    await page.route('**/api/v1/me/time',route=>route.abort());
+    await root.getByRole('button',{name:'Обновить',exact:true}).click();
+    await expect(root.getByText('Не удалось обновить сроки. Проверьте вход и повторите запрос.')).toBeVisible();
+    await expect(root.locator('article')).toHaveCount(0);
+    await page.unroute('**/api/v1/me/time');
+    await root.getByRole('button',{name:'Обновить',exact:true}).click();
+    await expect(root.getByText('Просрочено',{exact:true})).toHaveCount(2);
     const other=await open('bobby',1280);
     await expect(other.locator('#deadlines-section').getByText('Ближайших учебных сроков нет.')).toBeVisible();
     await other.screenshot({path:info.outputPath('deadlines-empty-1280.png')});

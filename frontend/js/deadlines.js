@@ -1,6 +1,6 @@
 import {requestJson} from './api.js';
 import {locale,t} from './language.js';
-import {createDeadlines} from './deadlines-state.js';
+import {createDeadlines,deadlineLifecycle} from './deadlines-state.js';
 
 export function mountDeadlines(document,request=requestJson){
   const root=document.getElementById('deadlines-section'),content=document.getElementById('deadlines-content');
@@ -24,6 +24,8 @@ export function mountDeadlines(document,request=requestJson){
     status.textContent=value.state==='loading'?t('Загружаем сроки…','Loading dates…'):
       value.state==='error'?t('Не удалось обновить сроки. Проверьте вход и повторите запрос.','Could not refresh dates. Check your session and retry.') : '';
     if(value.state!=='ready')return;
+    status.textContent=t('Сверено с серверным временем: ','Checked against server time: ')+new Date(value.as_of*1000).toLocaleString(locale(),{timeZone:'Europe/Moscow',dateStyle:'short',timeStyle:'medium'})+' · '+t('МСК')+
+      t(' · обновляется каждые 30 секунд',' · refreshes every 30 seconds');
     if(!value.items.length)content.append(node('p',t('Ближайших учебных сроков нет.','No upcoming academic dates.')));
     const labels={overdue:t('Просрочено','Overdue'),soon:t('В ближайшие 3 дня','Within 3 days'),upcoming:t('Предстоит','Upcoming')};
     for(const item of value.items){
@@ -50,14 +52,21 @@ export function mountDeadlines(document,request=requestJson){
       });card.append(button);content.append(card);
     }
   }});
-  document.getElementById('deadlines-refresh').addEventListener('click',()=>{if(active&&user)controller.load(user);});
+  const lifecycle=deadlineLifecycle({load:()=>controller.load(user),clear:()=>controller.clear()});
+  const activate=()=>lifecycle.activate(active&&user?.role==='student'&&document.visibilityState!=='hidden'?user.id:null);
+  document.getElementById('deadlines-refresh').addEventListener('click',()=>lifecycle.refresh());
+  document.addEventListener('visibilitychange',()=>{
+    activate();
+  });
+  globalThis.addEventListener('pageshow',activate);
+  globalThis.addEventListener('focus',activate);
   document.addEventListener('mgimov:page',event=>{
     reveal();
-    active=event.detail==='deadlines';if(active&&user)controller.load(user);else controller.clear();
+    active=event.detail==='deadlines';activate();
   });
   return {identity(value,expired){onExpired=expired;user=value.state==='ready'?value.user:null;
     if(!user){observer?.disconnect();pendingTarget=null;}
-    if(user&&active)controller.load(user);else controller.clear();}};
+    activate();}};
 }
 let mounted;
 export function deadlinesIdentity(value,expired){mounted??=mountDeadlines(document);mounted.identity(value,expired);}
