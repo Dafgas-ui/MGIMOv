@@ -64,6 +64,7 @@ def approve_policy(db, actor, now, plan_id, codes):
     plan = brs.plan_data(db, plan_id)
     item = brs.curriculum(db, plan['curriculum_id'])
     brs.scope(db, actor, item['faculty_id'], 'manage_plans')
+    brs.validate_credit_scale(plan, item)
     if (plan['locked_at'] is None or len(codes)!=len(set(codes))
             or not set(codes)<= {e['code'] for e in plan['events']}):
         brs.fail(422, 'Укажите обязательные мероприятия утверждённого плана.')

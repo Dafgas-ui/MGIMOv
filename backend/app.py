@@ -16,6 +16,9 @@ from .coursework_routes import install_coursework
 from .attendance_routes import install_attendance
 
 ASSETS = {
+    "/js/forecast.js": ("js/forecast.js", "text/javascript"),
+    "/js/forecast-state.js": ("js/forecast-state.js", "text/javascript"),
+    "/js/progress.js": ("js/progress.js", "text/javascript"),
     "/js/deadlines.js": ("js/deadlines.js", "text/javascript"),
     "/js/deadlines-state.js": ("js/deadlines-state.js", "text/javascript"),
     "/js/attendance.js": ("js/attendance.js", "text/javascript"),

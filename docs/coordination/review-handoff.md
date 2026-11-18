@@ -1064,3 +1064,53 @@ ACCEPT WITH CONDITIONS, локальный checkpoint разрешён. Стат
 приёмки сохраняется; пользователь не передал дополнительных результатов
 независимого прогона. Существующие ограничения отдельных GET, часов устройства
 и непроверенного браузерного перехода в прежнюю зачётку не снимаются.
+
+## Прогноз БРС №7 и анимация №26
+
+База `4959669`, рабочее дерево. Пользователь утвердил фиксированный порог
+обычного зачёта 50. До изменений локальный read-only аудит 112 SQLite не
+нашёл противоречивых шкал; состояние production не проверено. Шкала проверяется
+на создании, фиксации и утверждении политики. Уже утверждённые планы и оценки
+не переписываются. Новый GET `/api/v1/me/brs/forecast` вызывает существующий
+preview в read-транзакции и выдаёт только собственные опубликованные данные.
+
+Luna: проверьте 49/50/51, отказ при 70, шкалу дифзачёта и отсутствие вычисленной
+экзаменационной оценки; дополнительные обязательные условия допуска сохранены.
+Не путать расчёт условий с официальным допуском или оценкой. Проверьте отсутствие
+баллов, приватные черновики, highest/latest, перевод со сменой и без смены плана,
+отсутствие зачисления, изоляцию владельцев, текущий и запоздалый 401. Проверить
+отображение null, пояснение недоступного достижимого максимума, 390 px и reduce.
+Анимация меняет прозрачность, а не вычисляемые или семантические значения.
+№27, новые публикации оценок и изменения официальной зачётки не входят в этап.
+
+Итоговые прогоны Sol: целевые Python с посещаемостью 35/35; полная Python
+225/225, exit 0 (402.658 с), в приватной копии; npm 100/100; полный Chrome
+22/22, все exit 0. Первый полный Python дал 1 FAIL из-за тестовой шкалы 60
+в сценарии неоднозначного состава посещаемости. Изменён только порог фикстуры
+на 50, assertions не ослаблялись. Снимки 390/1280 px просмотрены визуально.
+Логи и команды — в `docs/test-results.md`. Миграции и production не изменены.
+Это не независимая приёмка. Linux и реальная база на VPS — NOT VERIFIED.
+
+После этих прогонов пользователь сообщил об итоговом независимом аудите Luna:
+ACCEPT WITH CONDITIONS, разрешён один локальный checkpoint №7/26. Статус
+условной приёмки сохраняется; новые независимые численные результаты не
+заявляются. Linux/VPS и публичный выпуск этим разрешением не подтверждаются.
+Временные каталоги Luna `.tmp/test-vy16z7nb`, `.tmp/test-0o3z9_vs`,
+`.tmp/test-o1ooo0kn` и диагностический артефакт Playwright не включаются
+в Git и не удаляются при фиксации.
+
+Состав изменения (29 путей, до возможных исправлений после аудита):
+
+- Backend: `backend/academics/forecast.py`, `backend/academics/attestation.py`,
+  `backend/academics/attestation_routes.py`, `backend/brs/service.py`, `backend/app.py`.
+- Frontend: `frontend/index.html`, `frontend/js/forecast.js`,
+  `frontend/js/forecast-state.js`, `frontend/js/progress.js`, `frontend/js/account.js`,
+  `frontend/js/academics.js`, `frontend/js/mvp.js`, `frontend/js/language.js`.
+- Тесты: `tests/forecast_fixture.py`, `tests/test_brs_forecast.py`,
+  `tests/forecast.test.js`, `tests/browser/forecast_server.py`,
+  `tests/browser/forecast.spec.js`, `tests/browser/playwright.config.js`,
+  `tests/account-state.test.js`, `tests/visibility.test.js`, `tests/test_attendance.py`.
+  В последнем изменён только порог синтетической фикстуры 60 → 50.
+- Документы: `docs/decisions.md`, `docs/rc4-foundation.md`, `docs/test-results.md`,
+  `docs/ai-development-log.md`, `docs/coordination/project-status.md`,
+  `docs/coordination/task-board.md`, `docs/coordination/review-handoff.md`.

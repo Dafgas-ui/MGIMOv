@@ -108,7 +108,7 @@ class AttendanceTests(unittest.TestCase):
         with connection(self.case.settings, write=True) as db:
             db.execute("INSERT INTO curriculum_items VALUES ('math-credit','p','math','s','credit',1)")
         plan = self.case.plan('math-credit')
-        plan['scale'] = [{'minimum':0,'outcome':'fail'}, {'minimum':60,'outcome':'pass'}]
+        plan['scale'] = [{'minimum':0,'outcome':'fail'}, {'minimum':50,'outcome':'pass'}]
         self.case.flow(self.case.locked(plan))
         ambiguous = self.detail()
         self.assertIsNone(ambiguous['candidate'])

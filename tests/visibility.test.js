@@ -43,7 +43,7 @@ async function fixture(t,role='staff'){
  function requestsIdentity(value,{suspend=false,discardOperation=false}={}){if(value)return requests.setUser(value);if(suspend)requests.suspend();else requests.clear({discardOperation});}
  const source=readFileSync('frontend/js/account.js','utf8').replace(/^import .*;$/gm,'');
  runInNewContext(source,{document,location:{protocol:'http:'},requestJson,createAccountState,requestsIdentity,
-  mountLanguage:()=>({setUser(){}}),t:value=>value,attestationIdentity(){},courseworkIdentity(){},attendanceIdentity(){},deadlinesIdentity(){},
+  mountLanguage:()=>({setUser(){}}),t:value=>value,attestationIdentity(){},courseworkIdentity(){},attendanceIdentity(){},deadlinesIdentity(){},forecastIdentity(){},
   createAppearanceState:()=>({setUser(id){appearanceUsers.push(id);},update(){},reset(){},systemThemeChanged(){}}),
   addEventListener(name,fn){windowEvents[name]=fn;},setInterval:fn=>timers.push(fn)});
  await tick();await tick();

@@ -8,6 +8,7 @@ from ..brs.models import Key, Strict, VersionNumber
 from ..brs.service import fail
 from ..db import connection
 from . import attestation as service
+from .forecast import student_forecasts
 
 Reason = Annotated[str, Field(min_length=3,max_length=300,pattern=r"\S")]
 Timestamp = Annotated[int, Field(ge=1,le=4102444800)]
@@ -97,6 +98,10 @@ def install_attestations(app,settings):
             if not db.execute("SELECT 1 FROM schema_migrations WHERE id='0012_attestations'").fetchone():
                 fail(503,'Требуется миграция аттестаций.')
             return action(db,actor,now)
+
+    @router.get('/me/brs/forecast')
+    def forecast(request:Request):
+        return run(request, student_forecasts)
 
     @router.get('/me/language')
     def get_language(request:Request):

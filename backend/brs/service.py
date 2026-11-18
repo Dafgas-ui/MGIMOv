@@ -76,7 +76,14 @@ def plan_data(db, key):
     return plan
 
 
+def validate_credit_scale(plan, item):
+    if item['control'] == 'credit' and sorted(
+            (row['minimum'], row['outcome']) for row in plan['scale']) != [(0, 'fail'), (50, 'pass')]:
+        fail(422, 'Для обычного зачёта порог «зачтено» фиксирован: 50 баллов.')
+
+
 def validate_plan(plan, item):
+    validate_credit_scale(plan, item)
     categories = {row["code"]: row["maximum"] for row in plan["categories"]}
     if (len(categories) != len(plan["categories"]) or sum(categories.values()) != 100
             or any(value <= 0 for value in categories.values())):

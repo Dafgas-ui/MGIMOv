@@ -2,6 +2,7 @@ import {t} from './language.js';
 import {shellRefresh,navigate} from './ui-shell.js';
 import {currentLessons} from './ui-state.js';
 import {requestJson} from './api.js';
+import {emphasizeProgress} from './progress.js';
 import {createWorkspace} from './mvp-state.js';
 const get=id=>document.getElementById(id);
 const statusLabel={submitted:'Отправлено',processing:'В обработке',approved:'Одобрено',rejected:'Отклонено',cancelled:'Отменено'};
@@ -97,7 +98,7 @@ function render(user,data){
     const {completed,total}=data.progress.progress,study=item('Учебный прогресс');
     if(total>0){
       const number=element('p',undefined,'daybook-progress-number');number.append(element('strong',String(completed)),element('span',t(` из ${total} испытаний завершено`,` of ${total} assessments complete`)));
-      const meter=element('progress',undefined,'daybook-progress');meter.max=total;meter.value=completed;meter.setAttribute('aria-label',t('Завершённые обязательные испытания'));study.append(number,meter);
+      const meter=element('progress',undefined,'daybook-progress');meter.max=total;meter.value=completed;meter.setAttribute('aria-label',t('Завершённые обязательные испытания'));study.append(number,meter);emphasizeProgress(meter);
     }else study.append(element('p','В зачётке пока нет обязательных испытаний.','muted'));
     study.append(jump('Открыть зачётку','#academics'));
     aside.append(study,attention,notices);layout.append(main,aside);summary.append(layout);

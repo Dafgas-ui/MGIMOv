@@ -1,6 +1,7 @@
 import {requestJson} from './api.js';
 import {createAcademicsState} from './academics-state.js';
 import {locale,t} from './language.js';
+import {emphasizeProgress} from './progress.js';
 const controls={exam:'Экзамен',credit:'Зачёт',graded_credit:'Дифференцированный зачёт'};
 const statuses={passed:'Успешно завершено',failed:'Неудовлетворительный результат',absent:'Неявка',overdue:'Истёк срок сдачи',upcoming:'Предстоит',ungraded:'Оценка не внесена',not_held:'Испытание не проведено',not_admitted:'Не допущен',unscheduled:'Дата / проведение не подтверждены',cancelled:'Отменено'};
 function resultText(attempt){return attempt.outcome==='graded'?t(`Оценка: ${attempt.grade}`,`Grade: ${attempt.grade}`):t({pass:'Зачтено',fail:'Не зачтено',absent:'Неявка'}[attempt.outcome] || 'Нет оценки');}
@@ -29,7 +30,7 @@ export function renderAcademics(document,root,data){
   if(p.state==='no_data')progress.append(node('p',t('Нет данных о текущей сессии.')));
   else {
     progress.append(node('p',data.current_semester.name),node('p',t(`${p.percent}% · завершено ${p.completed} из ${p.total}`,`${p.percent}% · ${p.completed} of ${p.total} complete`),'academic-percent'));
-    const meter=node('progress','');meter.max=100;meter.value=p.percent;meter.setAttribute('aria-label',t('Процент закрытия сессии','Term completion percentage'));progress.append(meter);
+    const meter=node('progress','');meter.max=100;meter.value=p.percent;meter.setAttribute('aria-label',t('Процент закрытия сессии','Term completion percentage'));progress.append(meter);emphasizeProgress(meter);
     progress.append(node('p',t(`Всего обязательных: ${p.total} · Завершено: ${p.completed} · Предстоит: ${p.upcoming} · Задолженности: ${p.debts} · Ожидают уточнения: ${p.pending}`,
       `Required: ${p.total} · Complete: ${p.completed} · Upcoming: ${p.upcoming} · Outstanding: ${p.debts} · Pending: ${p.pending}`)));
   }
