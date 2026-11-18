@@ -374,7 +374,7 @@ class BRSResultsTests(unittest.TestCase):
                                      grants,"staff_audit","assessment_attempts")}
         before = snapshot(self.case.settings)
         backup = self.root/"before-0010.sqlite3"
-        self.assertEqual(update(self.case.settings.database,backup=backup)["applied"][-1],"0023_coursework_brs_server_audit")
+        self.assertEqual(update(self.case.settings.database,backup=backup)["applied"][-1],"0024_attendance")
         self.assertEqual(update(self.case.settings.database)["pending"],[])
         self.assertEqual(status(backup,directory=definitions)["applied"][-1],"0009_brs_course_insert_guard")
         self.assertEqual(snapshot(type(self.case.settings)(backup)),before)
@@ -420,7 +420,7 @@ class BRSResultsTests(unittest.TestCase):
         database = self.case.settings.database
         backup = self.root / "before-0011.sqlite3"
         self.assertEqual(self.case.clients["alice"].get(self.public).status_code, 503)
-        self.assertEqual(update(database,backup=backup)["applied"][-1],"0023_coursework_brs_server_audit")
+        self.assertEqual(update(database,backup=backup)["applied"][-1],"0024_attendance")
         self.assertEqual(update(database)["pending"],[])
         with connection(self.case.settings,write=True) as db:
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")

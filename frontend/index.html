@@ -29,6 +29,7 @@
 </header>
 <div class="app-shell">
   <main id="main-content" tabindex="-1">
+    <button id="attendance-open" type="button" hidden>Посещаемость</button>
     <div class="heading"><div><p id="page-kicker" class="eyebrow">MGIMOv</p><h1 id="page-title" tabindex="-1">Вход в кабинет</h1><p id="page-subtitle" class="muted">Учёба и взаимодействие с деканатом в одном месте</p></div></div>
     <p id="identity-status" class="identity-status" role="status" aria-live="polite"></p>
     <div class="app-search" id="app-search-area" hidden><label for="app-search">Поиск по доступным разделам</label><input id="app-search" type="search" placeholder="Например, расписание или справка" autocomplete="off"><div id="app-search-results" hidden></div></div>
@@ -201,4 +202,10 @@
   <button id="app-menu" type="button" aria-expanded="false" aria-controls="app-mobile-menu">Все разделы</button>
   <nav id="app-mobile-menu" aria-label="Все разделы" hidden></nav>
 </div>
+<dialog id="attendance-dialog" aria-labelledby="attendance-title" class="card">
+  <h2 id="attendance-title">Журнал посещаемости</h2>
+  <button id="attendance-close" type="button">Закрыть журнал</button>
+  <p id="attendance-status" role="status" aria-live="polite"></p>
+  <div id="attendance-content"></div>
+</dialog>
 </body></html>

@@ -13,8 +13,10 @@ from .requests.routes import install_requests
 from .deanery.routes import install_deanery
 from .brs.routes import install_brs
 from .coursework_routes import install_coursework
+from .attendance_routes import install_attendance
 
 ASSETS = {
+    "/js/attendance.js": ("js/attendance.js", "text/javascript"),
     "/js/coursework.js": ("js/coursework.js", "text/javascript"),
     "/js/coursework-client.js": ("js/coursework-client.js", "text/javascript"),
     "/css/coursework.css": ("css/coursework.css", "text/css"),
@@ -57,6 +59,7 @@ def create_app(settings: Settings | None = None):
     install_deanery(application,settings)
     install_brs(application,settings)
     install_coursework(application,settings)
+    install_attendance(application,settings)
     readiness = Readiness(settings)
 
     @application.get("/api/health")

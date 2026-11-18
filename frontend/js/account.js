@@ -6,6 +6,7 @@ import {academicsIdentity} from './academics.js';
 import {scheduleIdentity} from './schedule.js';
 import {attestationIdentity} from './attestations.js';
 import {courseworkIdentity} from './coursework.js';
+import {attendanceIdentity} from './attendance.js';
 import {mountLanguage,t} from './language.js';
 import {createAccountState,createAppearanceState,appearanceSurfaces} from './account-state.js';
 const get = id => document.getElementById(id);
@@ -63,6 +64,10 @@ const controller = createAccountState({request:requestJson,
     if(value.state==='ready')language.setUser(value.user);
     else if(['anonymous','logout-pending'].includes(value.state)||value.identityInvalidated)language.setUser(null);
     attestationIdentity(value.state==='ready'?value.user:null,readCsrf);
+    attendanceIdentity(value,readCsrf,()=>{
+      controller.clear(t('Сессия завершена. Войдите снова.','Your session expired. Sign in again.'));
+      channel?.postMessage('identity-changing');
+    });
     courseworkIdentity(value,readCsrf,()=>{
       controller.clear(t('Сессия завершена. Войдите снова.','Your session expired. Sign in again.'));
       channel?.postMessage('identity-changing');

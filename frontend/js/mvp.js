@@ -132,7 +132,15 @@ function render(user,data){
     for(const group of data.catalogue.groups)filter.append(Object.assign(element('option',group.name),{value:group.id}));filter.value=staffGroup;
     const label=element('label','Фильтр групп среди загруженных занятий (до 200)');label.htmlFor=filter.id;lessons.append(label,filter);
     const cards=[];
-    for(const lesson of data.lessons.items){const card=item(`${lesson.date} · ${time(lesson.start_minute)} · ${lesson.subject}`,`${lesson.building}, ${lesson.room} · ${lesson.teacher} · ${t(lesson.status==='cancelled'?'Отменено':'Запланировано')}`);card.append(button('Изменить занятие',()=>editLesson(lesson)));card.hidden=!!staffGroup&&lesson.group_id!==staffGroup;cards.push([card,lesson.group_id]);lessons.append(card);}
+    for(const lesson of data.lessons.items){
+      const card=item(`${lesson.date} · ${time(lesson.start_minute)} · ${lesson.subject}`,
+        `${lesson.building}, ${lesson.room} · ${lesson.teacher} · ${t(lesson.status==='cancelled'?'Отменено':'Запланировано')}`);
+      card.append(button('Изменить занятие',()=>editLesson(lesson)));
+      const attendance=element('button','Журнал занятия');
+      attendance.type='button';attendance.dataset.attendance=lesson.id;card.append(attendance);
+      card.hidden=!!staffGroup&&lesson.group_id!==staffGroup;
+      cards.push([card,lesson.group_id]);lessons.append(card);
+    }
     if(!cards.length)lessons.append(element('p','Загруженных занятий нет. Можно создать новое занятие.'));
     filter.addEventListener('change',()=>{staffGroup=filter.value;for(const [card,group] of cards)card.hidden=!!staffGroup&&group!==staffGroup;});staff.append(lessons);fragment.append(staff);
   }

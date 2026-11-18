@@ -282,7 +282,7 @@ class BRSFoundationTests(unittest.TestCase):
         with self.assertRaises(MigrationError):
             update(database, backup=root/'before-broken.sqlite3', directory=migrations)
         self.assertEqual(status(database, directory=migrations)['pending'], [files[18].stem])
-        self.assertEqual(update(database, backup=root/'before19.sqlite3')['applied'][-1], '0023_coursework_brs_server_audit')
+        self.assertEqual(update(database, backup=root/'before19.sqlite3')['applied'][-1], '0024_attendance')
         self.assertEqual(update(database)['pending'], [])
         with connection(self.settings) as db:
             self.assertEqual(tuple(db.execute('''SELECT title,status,version,grading_mode FROM coursework_assignments
@@ -735,7 +735,7 @@ class BRSFoundationTests(unittest.TestCase):
             with connection(Settings(database),write=True) as db:
                 db.execute("INSERT INTO faculties VALUES ('prior','Prior')")
             backup = root/"backup.sqlite3"
-            self.assertEqual(update(database,backup=backup)["applied"][-1],"0023_coursework_brs_server_audit")
+            self.assertEqual(update(database,backup=backup)["applied"][-1],"0024_attendance")
             self.assertEqual(update(database)["pending"],[])
             for target in (database,backup):
                 with connection(Settings(target)) as db:
@@ -816,7 +816,7 @@ class BRSFoundationTests(unittest.TestCase):
 
         before = snapshot(self.settings)
         backup = root / "v8-backup.sqlite3"
-        self.assertEqual(update(self.settings.database, backup=backup)["applied"][-1], "0023_coursework_brs_server_audit")
+        self.assertEqual(update(self.settings.database, backup=backup)["applied"][-1], "0024_attendance")
         self.assertEqual(update(self.settings.database)["pending"], [])
         self.assertEqual(status(backup, directory=definitions)["applied"][-1], "0008_brs_course_identity")
         self.assertEqual(snapshot(Settings(backup)), before)

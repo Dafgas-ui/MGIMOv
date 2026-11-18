@@ -82,7 +82,7 @@ class LegacyAssessmentIdentityTests(unittest.TestCase):
             db.execute("UPDATE assessments SET status='cancelled' WHERE id='prior-exam'")
             before = snapshot(db)
         backup = path.with_name('before-0014.sqlite3')
-        self.assertEqual(update(path,backup=backup)['applied'][-1],'0023_coursework_brs_server_audit')
+        self.assertEqual(update(path,backup=backup)['applied'][-1],'0024_attendance')
         self.assertEqual(status(backup)['applied'][-1],'0013_legacy_assessment_identity')
         self.assertEqual(update(path)['pending'],[])
         with closing(sqlite3.connect(path,isolation_level=None)) as db:
@@ -155,7 +155,7 @@ class LegacyAssessmentIdentityTests(unittest.TestCase):
             db.commit()
             original = snapshot(db)
         backup = path.with_name('before-0013.sqlite3')
-        self.assertEqual(update(path,backup=backup)['applied'][-1],'0023_coursework_brs_server_audit')
+        self.assertEqual(update(path,backup=backup)['applied'][-1],'0024_attendance')
         self.assertEqual(status(backup)['applied'][-1],'0012_attestations')
         self.assertEqual(update(path)['pending'],[])
         with closing(sqlite3.connect(path,isolation_level=None)) as db:

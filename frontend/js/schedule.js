@@ -27,6 +27,7 @@ function lessonCard(node,lesson) {
   if(lesson.status!=='scheduled')card.classList.add('lesson-inactive');
   card.append(node('p',`${clock(lesson.start_minute)}–${clock(lesson.end_minute)} · ${t(kinds[lesson.kind]||lesson.kind)}`,'lesson-time'),node('h4',lesson.subject));
   card.append(node('p',lesson.teacher),node('p',`${lesson.building} · ${t('ауд.','room')} ${lesson.room}`));
+  const attendance=node('button','Посещаемость');attendance.type='button';attendance.dataset.attendance=lesson.id;card.append(attendance);
   if(lesson.placement==='moved_from')card.append(node('p',`${t('Перенесено на','Rescheduled to')} ${labelDate(lesson.actual.date)}, ${clock(lesson.actual.start_minute)}–${clock(lesson.actual.end_minute)}`,'change-badge'));
   else if(lesson.status==='cancelled')card.append(node('p','Занятие отменено','change-badge'));
   else if(lesson.changes.length)card.append(node('p','Расписание изменено','change-badge'));

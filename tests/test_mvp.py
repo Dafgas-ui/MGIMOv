@@ -172,7 +172,7 @@ class MVPTests(unittest.TestCase):
         before=fingerprints(config);backup=self.root/'v5-backup.sqlite3';update(path,backup=backup)
         self.assertTrue(before==fingerprints(config),'Upgrade changed existing records')
         self.assertTrue(before==fingerprints(Settings(backup)),'Backup changed existing records')
-        self.assertEqual(status(path)['applied'][-1],'0023_coursework_brs_server_audit');self.assertEqual(update(path)['pending'],[])
+        self.assertEqual(status(path)['applied'][-1],'0024_attendance');self.assertEqual(update(path)['pending'],[])
         self.assertEqual(status(backup,directory=definitions)['pending'],[])
     def test_real_http_and_assets(self):
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]

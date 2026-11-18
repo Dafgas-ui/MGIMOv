@@ -145,3 +145,14 @@ footer { font-size:.72rem; }
 .profile-card dl { display:grid;grid-template-columns:minmax(90px,max-content) minmax(0,1fr);gap:8px 16px; }
 .profile-card dd { margin:0;overflow-wrap:anywhere; }
 @media(max-width:900px) { .daybook-layout { grid-template-columns:1fr;gap:12px; } }
+#attendance-dialog {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+#attendance-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+#attendance-dialog .coursework-form { min-width: 0; }

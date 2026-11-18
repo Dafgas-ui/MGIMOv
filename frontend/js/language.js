@@ -1,5 +1,45 @@
 // UI copy only. User-entered and academic text are left in their original language.
 const entries = `
+Посещаемость|Attendance
+Причина|Reason
+Статус|Status
+Сохранить|Save
+Черновик сохранён. Обновите данные, сравните значения и подтвердите применение к новой версии.|Draft retained. Refresh, compare values and confirm applying it to the new version.
+Применить черновик к обновлённой версии|Apply draft to the refreshed version
+Отменить черновик|Discard draft
+К списку занятий|Back to classes
+На дату занятия нет подходящих зачисленных студентов. Подтверждение состава запрещено.|No eligible enrolled students on this class date. The roster cannot be confirmed.
+Журнал посещаемости|Attendance journal
+Журнал занятия|Class attendance
+Закрыть журнал|Close attendance
+Не отмечено|Unmarked
+Присутствовал|Present
+Отсутствовал|Absent
+Опоздал|Late
+История посещаемости|Attendance history
+Состав подтверждён|Roster confirmed
+Включение в состав подтверждено|Roster membership confirmed
+Исключение из актуального состава подтверждено|Removal from the current roster confirmed
+Занятие отменено. Отметка исключена из актуальной посещаемости.|Class cancelled. The mark is excluded from current attendance.
+Требуется проверка состава ведомости.|The roster needs confirmation.
+Вы больше не входите в актуальный состав. История сохранена.|You are no longer on the current roster. Your history is retained.
+Подтверждённых ведомостей пока нет.|No confirmed attendance records yet.
+Назначенных занятий нет.|No assigned classes.
+Занятие отменено. Ведомость доступна только для чтения.|Class cancelled. The journal is read-only.
+Проверьте датированный состав перед подтверждением.|Check the dated roster before confirming.
+Состав пуст. Это не означает отсутствие студентов на занятии.|The roster is empty. This does not mean all students were absent.
+Подтвердить состав|Confirm roster
+В подтверждённом составе нет студентов. Отметки отсутствия не создаются.|The confirmed roster is empty. No absence marks are created.
+Отметка посещаемости|Attendance mark
+Загружаем посещаемость…|Loading attendance…
+Изменение сохранено.|Change saved.
+Ведомость недоступна.|Attendance journal unavailable.
+Занятие, состав или отметка изменились. Обновите данные и проверьте состав.|The class, roster or mark changed. Refresh and check the roster.
+Проверьте поля и укажите причину.|Check the fields and provide a reason.
+База временно недоступна.|The database is temporarily unavailable.
+Не удалось загрузить посещаемость.|Could not load attendance.
+Нет однозначного потока БРС для дисциплины, группы, семестра и даты занятия.|No unambiguous BRS class for this subject, group, semester and date.
+Обнаружены неоднозначные зачисления. Требуется сверка состава.|Ambiguous enrollments found. The roster must be checked.
 Цифровой деканат — конкурсный концепт|Digital Dean's Office — competition concept
 К содержанию|Skip to content
 Цифровой деканат|Digital Dean's Office

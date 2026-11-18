@@ -24,7 +24,7 @@ test('errors, hidden state and stale response do not expose former schedule',asy
  f.fail(0);let release;f.hold(new Promise(r=>release=r));const pending=f.c.retry();f.c.clear();release();await pending;assert.equal(f.state.state,'hidden');
  await f.c.setUser({id:'staff',role:'staff'});assert.equal(f.state.state,'hidden');
 });
-function dom(){let focused;const element=()=>({children:[],style:{},events:{},attrs:{},className:'',classList:{add(){}},textContent:'',append(...children){this.children.push(...children);},replaceChildren(...children){this.children=children;},setAttribute(key,value){this.attrs[key]=value;},addEventListener(key,fn){this.events[key]=fn;},focus(){focused=this;}});return {document:{createElement:element},root:element(),get focused(){return focused;},read(node){return [node.textContent,...node.children.map(this.read.bind(this))].flat().join(' ');}};}
+function dom(){let focused;const element=()=>({children:[],style:{},dataset:{},events:{},attrs:{},className:'',classList:{add(){}},textContent:'',append(...children){this.children.push(...children);},replaceChildren(...children){this.children=children;},setAttribute(key,value){this.attrs[key]=value;},addEventListener(key,fn){this.events[key]=fn;},focus(){focused=this;}});return {document:{createElement:element},root:element(),get focused(){return focused;},read(node){return [node.textContent,...node.children.map(this.read.bind(this))].flat().join(' ');}};}
 test('week calendar separates overlapping markers and extends its hours for early and late lessons',()=>{
  const date='2026-11-04',late={start_minute:1350,end_minute:1400};
  const days=[{date,lessons:[late,{start_minute:420,end_minute:430},{start_minute:425,end_minute:465}]},{date:'2026-11-05',lessons:[]}];
