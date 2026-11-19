@@ -278,6 +278,8 @@ RC3.1 и RC3.2 требуют отдельного задания. [Переда
 | COURSEWORK-V | Sol | review | 0023 удаляет SQLite-функцию 0022. Сервер проверяет назначение до повтора и обязательную вставку аудита. Права Linux требуют проверки на стенде |
 | RC4.1-ATTENDANCE | Sol | review | После REJECT Luna запрещён пустой кандидат, добавлены черновики форм и явное разрешение конфликта. Исходные демогенераторы проверены без изменений |
 | RC4.1-DEADLINES | Sol | completed | №28. Student-список из Coursework, аттестаций и зачётки. Luna: ACCEPT WITH CONDITIONS, локальный checkpoint разрешён пользователем; публичный выпуск не разрешён |
-| RC4.1-DEADLINES-TIME | Sol | review | P1: серверное время, обновление 30 с, RTT до 5 с, возврат вкладки без fallback. Нужна проверка Luna |
+| RC4.1-DEADLINES-TIME | Sol | completed | Luna ACCEPT WITH CONDITIONS; локальный checkpoint ea4abbc. Бюджет всей загрузки 5 с, lifecycle/watchdog; публичный выпуск не разрешён |
 | RC4.1-FORECAST-PROGRESS | Sol | completed | №7/26. Luna: ACCEPT WITH CONDITIONS; пользователь разрешил один локальный checkpoint. Условия приёмки сохраняются, публичный выпуск не разрешён; №27 не реализуется |
 | RC4-P0.1-DEMO | Sol | review | Изолированный seed, Student → Staff → Student и подтверждаемые Windows-фикстуры для проверки цепочки путей. Ожидается повторная проверка Luna |
+
+| RC4-RELEASE-DOCS | Sol | review | README/RELEASE, синтетическая Linux-репетиция и конкурсный комплект обновлены отдельно после ea4abbc. Не зафиксированы; Linux/VPS NOT VERIFIED |
