@@ -267,20 +267,23 @@ class CourseworkHTTPTests(unittest.TestCase):
         path = self.case.settings.database
         previous = '0022_coursework_brs_authorization'
         release = '0023_coursework_brs_server_audit'
-        latest = '0024_attendance'
+        latest = '0025_room_availability'
+        tail = ['0024_attendance', latest]
         with closing(sqlite3.connect(path)) as db, db:
             # Recreate the exact 0021 schema in this test's private database.
             for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'attendance_%'").fetchall():
                 db.execute('DROP TRIGGER '+name)
             db.execute('DROP TABLE attendance_events')
             db.execute('DROP TABLE attendance_journals')
-            db.execute('DELETE FROM schema_migrations WHERE id=?', (latest,))
+            db.execute('DROP TABLE room_unavailability')
+            db.execute('DROP TABLE building_open_hours')
+            db.executemany('DELETE FROM schema_migrations WHERE id=?', [(item,) for item in tail])
             db.execute('DELETE FROM schema_migrations WHERE id IN (?,?)', (previous, release))
             self.insert_unchecked_publication(db, work, course, 'teacher')
-        self.assertEqual(status(path)['pending'], [previous, release, latest])
+        self.assertEqual(status(path)['pending'], [previous, release, *tail])
         with self.assertRaisesRegex(MigrationError, previous):
             update(path, backup=path.with_name('before-missing-audit.sqlite3'))
-        self.assertEqual(status(path)['pending'], [previous, release, latest])
+        self.assertEqual(status(path)['pending'], [previous, release, *tail])
         with closing(sqlite3.connect(path)) as db, db:
             self.assertEqual(db.execute('SELECT count(*) FROM coursework_brs_sources').fetchone()[0], 1)
             db.execute("""INSERT INTO staff_audit VALUES
@@ -295,7 +298,7 @@ class CourseworkHTTPTests(unittest.TestCase):
         for sql in sorted(DIRECTORY.glob('*.sql'))[:22]:
             shutil.copyfile(sql, prefix / sql.name)
         self.assertEqual(update(path, backup=path.with_name('before-0022.sqlite3'), directory=prefix)['applied'][-1], previous)
-        self.assertEqual(status(path)['pending'], [release, latest])
+        self.assertEqual(status(path)['pending'], [release, *tail])
         self.assertEqual(update(path, backup=path.with_name('before-0023.sqlite3'))['applied'][-1], latest)
         self.assertEqual(update(path)['pending'], [])
         with closing(sqlite3.connect(path)) as db:

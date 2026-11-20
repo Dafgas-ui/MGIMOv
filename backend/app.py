@@ -14,8 +14,11 @@ from .deanery.routes import install_deanery
 from .brs.routes import install_brs
 from .coursework_routes import install_coursework
 from .attendance_routes import install_attendance
+from .room_routes import install_rooms
 
 ASSETS = {
+    "/js/rooms.js": ("js/rooms.js", "text/javascript"),
+    "/js/rooms-state.js": ("js/rooms-state.js", "text/javascript"),
     "/js/forecast.js": ("js/forecast.js", "text/javascript"),
     "/js/forecast-state.js": ("js/forecast-state.js", "text/javascript"),
     "/js/progress.js": ("js/progress.js", "text/javascript"),
@@ -65,6 +68,7 @@ def create_app(settings: Settings | None = None):
     install_brs(application,settings)
     install_coursework(application,settings)
     install_attendance(application,settings)
+    install_rooms(application,settings)
     readiness = Readiness(settings)
 
     @application.get("/api/health")

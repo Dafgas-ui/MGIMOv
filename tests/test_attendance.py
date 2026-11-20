@@ -211,8 +211,10 @@ class AttendanceTests(unittest.TestCase):
                 db.execute('DROP TRIGGER '+name)
             db.execute('DROP TABLE attendance_events')
             db.execute('DROP TABLE attendance_journals')
-            db.execute("DELETE FROM schema_migrations WHERE id='0024_attendance'")
-        self.assertEqual(status(old)['pending'], ['0024_attendance'])
+            db.execute('DROP TABLE room_unavailability')
+            db.execute('DROP TABLE building_open_hours')
+            db.execute("DELETE FROM schema_migrations WHERE id IN ('0024_attendance','0025_room_availability')")
+        self.assertEqual(status(old)['pending'], ['0024_attendance','0025_room_availability'])
         with closing(sqlite3.connect(old)) as db:
             users = db.execute('SELECT id,role FROM users ORDER BY id').fetchall()
             controls = {name:db.execute('SELECT * FROM "'+name+'"').fetchall() for (name,) in
@@ -225,7 +227,7 @@ class AttendanceTests(unittest.TestCase):
         migration.write_text(migration.read_text(encoding='utf8')+'\nSELECT * FROM invalid_attendance_table;\n', encoding='utf8')
         with self.assertRaisesRegex(MigrationError, '0024_attendance'):
             update(old, backup=old.with_name('before-failed24.sqlite3'), directory=broken)
-        self.assertEqual(status(old)['pending'], ['0024_attendance'])
+        self.assertEqual(status(old)['pending'], ['0024_attendance','0025_room_availability'])
         self.assertEqual(update(old, backup=old.with_name('before24.sqlite3'))['pending'], [])
         self.assertEqual(update(old)['pending'], [])
         with closing(sqlite3.connect(old)) as db:

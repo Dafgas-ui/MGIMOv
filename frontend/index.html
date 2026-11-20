@@ -152,6 +152,12 @@
     <button id="coursework-refresh" type="button">Обновить</button>
     <div id="coursework-content"></div>
 </section>
+<section id="rooms-section" class="card screen-off" hidden aria-labelledby="rooms-title">
+<h2 id="rooms-title">Поиск аудиторий</h2>
+<p>Поиск учитывает занятия и аттестации, внесённые в MGIMOv. Фактическая доступность помещения зависит от правил университета</p>
+<p>Время поиска — МСК.</p>
+<form id="rooms-form"><label>Дата<input name="date" type="date" required></label><label>Начало<input name="start" type="time" required></label><label>Конец<input name="end" type="time" required></label><label>Корпус<select name="building"></select></label><label>Минимальная вместимость<input name="capacity" type="number" min="1" max="1000" value="1" required></label><button id="rooms-submit" type="submit">Найти аудитории</button></form>
+<p id="rooms-status" role="status" aria-live="polite"></p><div id="rooms-results"></div></section>
 <section id="deadlines-section" class="card screen-off" aria-labelledby="deadlines-title" hidden>
     <h2 id="deadlines-title">Учебные сроки</h2>
     <p>Сроки сдачи и даты испытаний · МСК</p>

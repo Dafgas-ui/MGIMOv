@@ -1,5 +1,14 @@
 // UI copy only. User-entered and academic text are left in their original language.
 const entries = `
+Поиск аудиторий|Room search
+Найти аудитории|Find rooms
+Начало|Start
+Конец|End
+Корпус|Building
+Минимальная вместимость|Minimum capacity
+Время поиска — МСК.|Search times use Moscow time.
+Поиск учитывает занятия и аттестации, внесённые в MGIMOv. Фактическая доступность помещения зависит от правил университета|The search uses classes and assessments recorded in MGIMOv. Actual access depends on university rules.
+
 Прогноз БРС|BRS forecast
 Обновить прогноз|Refresh forecast
 Учебные сроки|Academic dates

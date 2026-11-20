@@ -7,6 +7,7 @@ import {scheduleIdentity} from './schedule.js';
 import {attestationIdentity} from './attestations.js';
 import {courseworkIdentity} from './coursework.js';
 import {attendanceIdentity} from './attendance.js';
+import {roomsIdentity} from './rooms.js';
 import {deadlinesIdentity} from './deadlines.js';
 import {forecastIdentity} from './forecast.js';
 import {mountLanguage,t} from './language.js';
@@ -66,6 +67,7 @@ const controller = createAccountState({request:requestJson,
     if(value.state==='ready')language.setUser(value.user);
     else if(['anonymous','logout-pending'].includes(value.state)||value.identityInvalidated)language.setUser(null);
     attestationIdentity(value.state==='ready'?value.user:null,readCsrf);
+    roomsIdentity(value,()=>{controller.clear(t('Сессия завершена. Войдите снова.','Your session expired. Sign in again.'));channel?.postMessage('identity-changing');});
     forecastIdentity(value,()=>{
       controller.clear(t('Сессия завершена. Войдите снова.','Your session expired. Sign in again.'));
       channel?.postMessage('identity-changing');
