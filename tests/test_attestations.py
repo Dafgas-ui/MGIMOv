@@ -54,7 +54,7 @@ class AttestationTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT count(*) FROM users WHERE role='student'").fetchone()[0],11)
             self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],'ok')
-        self.assertEqual(status(self.settings.database)['applied'][-1],'0025_room_availability')
+        self.assertEqual(status(self.settings.database)['applied'][-1],'0026_attendance_qr')
         self.assertEqual(update(self.settings.database)['pending'],[])
         subject = 'Демонстрационное право'
         corrected = self.records('s04')[subject]
@@ -256,7 +256,7 @@ class AttestationTests(unittest.TestCase):
         with connection(settings,write=True) as db:
             db.execute("INSERT INTO faculties VALUES ('upgrade','Upgrade fixture')")
         backup = root/'backup.sqlite3'
-        self.assertEqual(update(settings.database,backup=backup)['applied'][-1],'0025_room_availability')
+        self.assertEqual(update(settings.database,backup=backup)['applied'][-1],'0026_attendance_qr')
         self.assertEqual(status(backup,directory=prior)['applied'][-1],'0011_brs_integer_points')
         self.assertEqual(update(settings.database)['pending'],[])
         with connection(settings) as db:

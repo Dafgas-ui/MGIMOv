@@ -1592,3 +1592,123 @@ Linux, NVDA/JAWS и повторный независимый прогон Luna 
 локальный checkpoint №8. Это решение о приёмке не означает нового собственного
 прогона или подтверждения Linux/NVDA/JAWS. Состав независимых динамических
 прогонов в этом сообщении не уточнён. Прежний REJECT заменён для текущего diff.
+
+## 20.11.2026 — QR-посещаемость V1
+
+База main 16374b071d542f0824a2436637cc38151ccd574f, незакоммиченный diff.
+Только собственные синтетические SQLite, без файлов/worktree Luna и Gemini.
+
+Фактически выполнено:
+
+- `.venv/Scripts/python.exe -B -m unittest tests.test_attendance_qr -v`: **12/12 PASS**,
+  exit 0, 6.454 s в последнем прогоне. .tmp/qr-target-final.log. Авторизация/CSRF,
+  чужой студент, реальные Student/Staff-сессии, все ручные статусы, собственная
+  история, токены только в хешах, preview без отметки, expiry/revoke/rotation,
+  logout издателя, актуальность состава/занятия, issue replay, конкурентные
+  одинаковые/разные Student запросы, конкуренция с ручной отметкой, rate limit,
+  обязательный audit/receipt с rollback, включая RAISE IGNORE. Дополнительно
+  в последнем прогоне проверены конкурентный первый выпуск одного ключа и
+  отказ повтору issue после отзыва назначения; только один ответ содержит код.
+- Связанный набор `tests.test_attendance_qr tests.test_attendance tests.test_rooms
+  tests.test_coursework_http`: 38/38 PASS до добавления последнего негативного
+  QR-сценария; результат исторический, не подменяет последнюю полную регрессию.
+- Полная `.venv/Scripts/python.exe -B -m unittest discover -s tests -v` на приватной
+  копии backend/frontend/tests: **245/245 PASS**, 0 FAIL/ERROR/SKIP, 393.277 s,
+  exit 0; .tmp/qr-python-full.log. Включает backup/restore/rollback с новой
+  схемой и миграции. Приватная копия создаётся с защитой ACL, cleanup только
+  собственного каталога в finally после завершения subprocess. Последующее
+  расширение assertions гонки выпуска проверено целевым прогоном 12/12.
+- `npm test`: **116/116 PASS**, 0 FAIL/SKIP, exit 0; .tmp/qr-js.log. Безопасный SVG,
+  удаление fragment, отсутствие авто-отметки, двойная отправка, account/role
+  switch, поздние success/401, logout во время запроса, явный network retry,
+  сохранение request_key при неопределённости и новый ключ для новой операции.
+- Полный `node tests/browser/node_modules/@playwright/test/cli.js test --config
+  tests/browser/playwright.config.js`: **24/24 PASS**, exit 0, 1.5 min;
+  .tmp/qr-chrome-full.log. Реальные HTTP/Uvicorn, health 200, существующие
+  Student/Staff, расписание, БРС, Coursework, посещаемость, сроки, аудитории.
+- Расширенный `... attendance-qr.spec.js`: **1/1 PASS**, exit 0, 1.1 min;
+  .tmp/qr-chrome-target.log. Staff 1280/Student 390, явная отметка, ручное
+  исправление/приоритет, отзыв/expiry, чужой студент, удаление URL fragment,
+  повтор после реального сетевого отказа и RU/EN. Авторизация/бизнес-ответы
+  не подменялись; route.abort использован только для имитации сетевого отказа.
+- AST Python / node --check, git diff --check: PASS. `pip check`: PASS.
+
+Миграция: заполненная 0025 с подтверждённым составом и ручной историей
+обновлена реальным migrator до 0026, старые события совпали, повтор — no-op,
+integrity_check=ok, foreign_key_check пуст. Копия backup 0025 с ошибочной 0026
+полностью откатывается: logical dump, схема, триггеры и история не изменены.
+
+Артефакты .tmp не отслеживаются Git. Снимки без действующих QR:
+.tmp/playwright-p1/results/attendance-qr-*/qr-student-confirmed-390.png и
+qr-staff-revoked-1280.png. Trace выключен; bearer tokens/сессии не пишутся в
+отчёты, сетевые URL или логи. PNG не создаются/не используются генератором QR.
+
+NOT VERIFIED: независимая приёмка Luna, Linux/production/VPS, реальное считывание
+QR камерой телефона через доступный телефону HTTPS-origin, ручной скринридер.
+Chrome вводит реальную выданную ссылку, не имитирует её декодирование камерой.
+Стандартный генератор проверен матрицей/визуальным выводом, физическое сканирование
+не заявляется выполненным. Никакой гарантии физического присутствия нет.
+
+## QR V1 — P1/P2 после REJECT Luna, 20.11.2026
+
+База main 16374b071d542f0824a2436637cc38151ccd574f, 43 незакоммиченных пути.
+До правок дефекты воспроизведены: .tmp/qr-p1-before.log — cleanup FK ERROR
+(exit 1); .tmp/qr-p2-before.log — неверный present при текущем absent (exit 1).
+Эти отрицательные прогоны не считаются успешными проверками.
+
+После исправлений на временных синтетических SQLite:
+
+- `.venv/Scripts/python.exe -B -m unittest tests.test_attendance_qr -v`: 15/15 PASS,
+  8.035 s, exit 0; .tmp/qr-fix-target.log. Сюда входят 0025→0026 с историей,
+  backup, повтор migrator, rollback ошибочной 0026, integrity/FK и P2 повтор
+  исходного receipt после ручного absent без новых событий/receipt.
+- Отдельно три test_attendance_qr.AttendanceQRTests: test_cleanup_cli_after_qr_uses_unmodified_production_command,
+  test_cleanup_expired_issuer_preserves_qr_history_and_other_sessions,
+  test_logout_then_physical_cleanup_rejects_token_before_and_after: 3/3 PASS,
+  2.366 s, exit 0; .tmp/qr-fix-cleanup.log. Реальные cleanup/main с parser и
+  --confirm-cleanup; только часы фикстуры инжектированы для датированных данных.
+  Удалены issuer и другие просроченные сессии, неизменны QR sessions/receipts/events,
+  integrity_check=ok, foreign_key_check пуст, QR даёт 409 до и после удаления
+  при неизменном времени ещё не истёкшего токена.
+- `npm test`: 117/117 PASS, exit 0; .tmp/qr-fix-js.log.
+- `node tests/browser/node_modules/@playwright/test/cli.js test --config tests/browser/playwright.config.js attendance-qr.spec.js`:
+  1/1 PASS, 5.3 s, exit 0; .tmp/qr-fix-chrome-target.log. Реальные HTTP/Uvicorn,
+  старый receipt outcome=present при текущем absent, manual_mark, корректный RU
+  и EN текст, без перезаписи ручной отметки. Модалка закрывается перед сменой языка.
+
+Полные Python/Chrome прогоны запущены отдельно, результаты записываются ниже.
+Метаданные сохраняемой data/deanery.sqlite3: только 0001_initial, 0026 не
+применялась; custom MGIMOV_DB_PATH отсутствует. Чтение immutable, рабочие данные
+не выводились. Базы/worktree Luna и Gemini не открывались. Другие сохраняемые
+внешние базы NOT VERIFIED; при старой применённой 0026 нужен отдельный переход.
+
+### Заключительный результат P1/P2
+
+Полная `.venv/Scripts/python.exe -B -m unittest discover -s tests -v` на
+приватной копии: **248/248 PASS**, 0 FAIL/ERROR/SKIP, 397.613 s, exit 0.
+Runner также завершился exit 0 после cleanup своей копии. Журнал:
+.tmp/qr-fix-python-full.log. Полный Chrome: **24/24 PASS**, 1.8 min, exit 0;
+.tmp/qr-fix-chrome-full.log. Целевой QR Chrome: 1/1 PASS, 5.3 s, exit 0.
+JS: 117/117; QR HTTP/SQL: 15/15; cleanup отдельно: 3/3, все exit 0.
+Git diff --check / AST / node --check: PASS. Индекс пуст, сохранены 43 пути.
+
+SHA-256 сохраняемой data/deanery.sqlite3 до и после работы совпал; чтение
+метаданных и checksum не изменило файл. 0026 к ней не применялась.
+Исправлены 6 файлов кода/тестов: backend/migrations/0026_attendance_qr.sql,
+backend/attendance_qr.py, frontend/js/attendance-qr.js, tests/test_attendance_qr.py,
+tests/attendance-qr.test.js, tests/browser/attendance-qr.spec.js; дополнены
+существующие docs/attendance-qr.md, test-results.md, ai-development-log.md и
+три документа координации. 0001–0025, cleanup_sessions.py и глобальная FK-защита
+не менялись. Нет commit/merge/push/tag/ZIP/deploy или подключений к VPS.
+
+NOT VERIFIED: повторный независимый аудит Luna, Linux, физическая камера
+телефона/публичный HTTPS и ручной скринридер, сохраняемые базы за пределами
+проверенных мест текущего проекта. Worktree Luna/Gemini не открывались.
+
+20.11.2026: пользователь сообщил независимый ACCEPT Luna для QR V1 и разрешил
+локальный checkpoint 43 путей. Это заменяет прежний независимый REJECT;
+собственные результаты остаются Python 248/248, JS 117/117, Chrome 24/24 PASS.
+В операции фиксации функциональные тесты заново не запускались. Состав
+независимых динамических прогонов не уточнён; Linux/телефон/NVDA/JAWS не
+объявляются проверенными. Перед коммитом повторены diff --check, состав
+индекса и проверка защищённых файлов/исключённых артефактов.

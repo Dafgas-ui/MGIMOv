@@ -72,3 +72,5 @@ def install_attendance(app, settings):
         return run(request, 'student', read)
 
     app.include_router(router)
+    from .attendance_qr_routes import install_qr
+    install_qr(app, settings)

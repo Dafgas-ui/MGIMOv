@@ -209,7 +209,7 @@ class RecoveryRehearsalTest(unittest.TestCase):
         def verify_recovered(output):
             self.assertEqual(digest(output), original_bundle[0])
             self.cli(ROOT, 'diagnose', '--db', output)
-            self.assertEqual(status(output)['applied'][-1], '0025_room_availability')
+            self.assertEqual(status(output)['applied'][-1], '0026_attendance_qr')
             with closing(sqlite3.connect(output.as_uri() + '?mode=ro', uri=True)) as db:
                 self.assertEqual(db.execute('SELECT id, role FROM users ORDER BY id').fetchall(), roles)
             with self.serve(ROOT, output) as origin:
@@ -240,7 +240,7 @@ class RecoveryRehearsalTest(unittest.TestCase):
         make_private_directory(candidate)
         shutil.copytree(ROOT / 'backend', candidate / 'backend', ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copytree(ROOT / 'frontend', candidate / 'frontend')
-        (candidate / 'backend/migrations/0026_rehearsal.sql').write_text(
+        (candidate / 'backend/migrations/0027_rehearsal.sql').write_text(
             'CREATE TABLE rehearsal_upgrade (id INTEGER PRIMARY KEY);\n', encoding='ascii')
         candidate_db = candidate / 'candidate.sqlite3'
         shutil.copyfile(backup, candidate_db)

@@ -1,5 +1,7 @@
 // UI copy only. User-entered and academic text are left in their original language.
 const entries = `
+QR-посещаемость|QR attendance
+Закрыть QR|Close QR
 Поиск аудиторий|Room search
 Найти аудитории|Find rooms
 Начало|Start

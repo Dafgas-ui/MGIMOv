@@ -202,7 +202,7 @@ class ContestDemoTest(unittest.TestCase):
         settings = Settings(second)
         for path in (first, second):
             report = status(path)
-            self.assertEqual(report['applied'][-1], '0025_room_availability')
+            self.assertEqual(report['applied'][-1], '0026_attendance_qr')
             self.assertEqual(report['pending'], [])
             with connection(Settings(path)) as db:
                 self.assertEqual(db.execute('SELECT count(*) FROM coursework_assignments').fetchone()[0], 2)

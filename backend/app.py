@@ -17,6 +17,7 @@ from .attendance_routes import install_attendance
 from .room_routes import install_rooms
 
 ASSETS = {
+    "/js/attendance-qr.js": ("js/attendance-qr.js", "text/javascript"),
     "/js/rooms.js": ("js/rooms.js", "text/javascript"),
     "/js/rooms-state.js": ("js/rooms-state.js", "text/javascript"),
     "/js/forecast.js": ("js/forecast.js", "text/javascript"),

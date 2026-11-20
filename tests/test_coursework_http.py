@@ -267,12 +267,14 @@ class CourseworkHTTPTests(unittest.TestCase):
         path = self.case.settings.database
         previous = '0022_coursework_brs_authorization'
         release = '0023_coursework_brs_server_audit'
-        latest = '0025_room_availability'
-        tail = ['0024_attendance', latest]
+        latest = '0026_attendance_qr'
+        tail = ['0024_attendance', '0025_room_availability', latest]
         with closing(sqlite3.connect(path)) as db, db:
             # Recreate the exact 0021 schema in this test's private database.
             for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'attendance_%'").fetchall():
                 db.execute('DROP TRIGGER '+name)
+            db.execute('DROP TABLE attendance_qr_receipts')
+            db.execute('DROP TABLE attendance_qr_sessions')
             db.execute('DROP TABLE attendance_events')
             db.execute('DROP TABLE attendance_journals')
             db.execute('DROP TABLE room_unavailability')

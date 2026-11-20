@@ -57,7 +57,7 @@ def history(db, lesson_id):
 def state(db, lesson_id):
     events = history(db, lesson_id)
     rosters = [event for event in events if event['kind'] == 'roster']
-    marks = {event['payload']['student_id']:event['payload']['status'] for event in events if event['kind'] == 'mark'}
+    marks = {event['payload']['student_id']:event['payload']['status'] for event in events if event['kind'] in ('mark','qr_mark')}
     return events, rosters[-1]['payload'] if rosters else None, marks
 
 
@@ -107,7 +107,9 @@ def change(db, actor, now, lesson_id, data):
         student = next((row for row in detail['students'] if row['id']==data['student_id']), None)
         if student is None:
             fail(404)
-        if student['status'] == data['status']:
+        last_mark = next((event for event in reversed(detail['history'])
+                          if event['kind'] in ('mark','qr_mark') and event['payload']['student_id']==student['id']), None)
+        if student['status'] == data['status'] and (last_mark is None or last_mark['kind']=='mark'):
             fail(409, 'Отметка уже имеет это значение.')
         payload = {'student_id':student['id'], 'previous':student['status'], 'status':data['status']}
         kind = 'mark'
@@ -133,7 +135,7 @@ def student_detail(db, actor, lesson_id):
         fail(404)
     own_history = []
     for event in events:
-        if event['kind']=='mark' and event['payload']['student_id']==actor['id']:
+        if event['kind'] in ('mark','qr_mark') and event['payload']['student_id']==actor['id']:
             own_history.append(event)
         elif event['kind']=='roster' and event['version']>=own_rosters[0]['version']:
             own_history.append({**event, 'payload':{'date':event['payload']['date'],

@@ -29,7 +29,7 @@ export function mountAttendance(document, request=requestJson) {
       const p=event.payload;
       const rosterLabel=Array.isArray(p.students)?`${t('Состав подтверждён')} · ${p.students.length}`:
         t(p.included?'Включение в состав подтверждено':'Исключение из актуального состава подтверждено');
-      const change=event.kind==='mark'?`${t(attendanceLabels[p.previous])} → ${t(attendanceLabels[p.status])}`:
+      const change=['mark','qr_mark'].includes(event.kind)?`${t(attendanceLabels[p.previous])} → ${t(attendanceLabels[p.status])}${event.kind==='qr_mark'?' · QR':''}`:
         `${rosterLabel} · ${p.date}`;
       list.append(node('p',`№ ${event.version} · ${change} · ${event.actor_id} · ${new Date(event.created_at*1000).toLocaleString(locale(),{timeZone:'Europe/Moscow'})} · ${event.reason}`));
     }
@@ -89,6 +89,9 @@ export function mountAttendance(document, request=requestJson) {
     content.append(node('h3',`${lesson.date} · ${lesson.subject}`));
     if(lesson.status==='cancelled')content.append(node('p','Занятие отменено. Ведомость доступна только для чтения.'));
     if(data.blocked_reason)content.append(node('p',data.blocked_reason));
+    if(data.can_mark)button(content,t('QR-посещаемость','QR attendance'),()=>{
+      dialog.close();document.dispatchEvent(new CustomEvent('mgimov:attendance-qr-open',{detail:data}));
+    });
     if(data.needs_confirmation&&data.candidate&&lesson.status==='scheduled'){
       content.append(node('p','Проверьте датированный состав перед подтверждением.'));
       for(const row of data.candidate.students)content.append(node('p',row.full_name));

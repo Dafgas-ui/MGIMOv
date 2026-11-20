@@ -85,7 +85,7 @@ class RoomTests(unittest.TestCase):
   root=self.enterContext(base.temporary())
   prior=root/'through-0024';prior.mkdir()
   release=root/'through-0025';release.mkdir()
-  files=sorted(DIRECTORY.glob('*.sql'))
+  files=sorted(p for p in DIRECTORY.glob('*.sql') if p.name[:4]<='0025')
   self.assertEqual(files[-1].stem,'0025_room_availability')
   self.assertEqual(len(files),25)
   for source in files:
