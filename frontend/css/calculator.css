@@ -1,0 +1,145 @@
+/* BRS 'What If?' Calculator Styles */
+.brs-calculator-details {
+  margin-top: 1rem;
+  border-top: 1px dashed var(--border-color, #cbd5e1);
+  padding-top: 0.75rem;
+}
+
+.brs-calculator-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary, #1e3a8a);
+  padding: 0.5rem 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.brs-calculator-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.brs-calculator-disclaimer {
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+  background: var(--bg-surface-secondary, #f8fafc);
+  border-left: 3px solid var(--accent, #3b82f6);
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+}
+
+.brs-calculator-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.brs-calculator-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.brs-calculator-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.brs-calculator-input {
+  width: 90px;
+  min-height: 44px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 4px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.brs-calculator-input.brs-input-hypothetical {
+  border: 2px dashed var(--accent, #3b82f6);
+  background-color: var(--bg-highlight, #eff6ff);
+}
+
+.brs-calculator-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.brs-calculator-reset {
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.brs-calculator-results {
+  background: var(--bg-surface-secondary, #f8fafc);
+  border-radius: 6px;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+}
+
+.brs-calculator-results h5 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+}
+
+.brs-sim-total {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 0 0 0.25rem 0;
+}
+
+.brs-sim-explanation {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.brs-badge-admitted {
+  color: #166534;
+  font-weight: 600;
+  margin: 0.25rem 0;
+}
+
+.brs-badge-not-admitted {
+  color: #991b1b;
+  font-weight: 600;
+  margin: 0.25rem 0;
+}
+
+.brs-exam-examiner-notice {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-muted, #64748b);
+  margin: 0.25rem 0 0 0;
+}
+
+.brs-cap-notice {
+  font-size: 0.8rem;
+  color: #b45309;
+  margin: 0.25rem 0 0 0;
+}
+
+/* Mobile responsive (360px - 390px) */
+@media (max-width: 480px) {
+  .brs-calculator-label {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .brs-calculator-input {
+    width: 100%;
+  }
+  .brs-calculator-reset {
+    width: 100%;
+  }
+}

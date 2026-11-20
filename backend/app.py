@@ -17,6 +17,9 @@ from .attendance_routes import install_attendance
 from .room_routes import install_rooms
 
 ASSETS = {
+    "/js/brs-calculator.js": ("js/brs-calculator.js", "text/javascript"),
+    "/js/brs-calculator-state.js": ("js/brs-calculator-state.js", "text/javascript"),
+    "/css/calculator.css": ("css/calculator.css", "text/css"),
     "/js/attendance-qr.js": ("js/attendance-qr.js", "text/javascript"),
     "/js/rooms.js": ("js/rooms.js", "text/javascript"),
     "/js/rooms-state.js": ("js/rooms-state.js", "text/javascript"),

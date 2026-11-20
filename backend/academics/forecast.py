@@ -1,4 +1,6 @@
 """Read-only explanations of the existing attestation preview, never official results."""
+import json
+
 from ..auth.service import AuthError
 from ..brs import results, service as brs
 from . import attestation
@@ -42,6 +44,9 @@ def student_forecasts(db, actor, now):
         if row['control'] != 'exam' and present and not missing:
             predicted = calculated['outcome'] if row['control']=='credit' else calculated['grade']
         categories = {c['code']:c for c in summary['categories']}
+        required = set(json.loads(brs.get(db,
+            'SELECT required_events FROM attestation_policies WHERE plan_id=?',
+            plan['id'])['required_events']))
         items.append({**item, 'available': True, 'plan_id': plan['id'],
             'published_points': calculated['points'] if present else None,
             'plan_maximum': 100, 'maximum_reachable': None,
@@ -54,9 +59,12 @@ def student_forecasts(db, actor, now):
             'result_reason': ('examiner_decides' if row['control']=='exam' else
                               'no_published_results' if not present else 'unpublished_events' if missing else 'current_published_results'),
             'events': [{'code':e['code'], 'title':e['title'], 'maximum':e['maximum'],
-                        'points':events[e['code']]['points'], 'retake_policy':e['retake_policy']}
+                        'points':events[e['code']]['points'], 'retake_policy':e['retake_policy'],
+                        'category_code':e['category_code'], 'required':e['code'] in required,
+                        'admission_min':e['admission_min'] or 0}
                        for e in plan['events']],
             'categories': [{'code':c['code'], 'title':c['title'], 'maximum':c['maximum'],
+                            'admission_min':c['admission_min'] or 0,
                             'points':categories[c['code']]['points'] if any(
                                 e['category_code']==c['code'] and events[e['code']]['points'] is not None
                                 for e in plan['events']) else None} for c in plan['categories']],

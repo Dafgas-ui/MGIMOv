@@ -2,6 +2,7 @@ import {requestJson} from './api.js';
 import {t} from './language.js';
 import {createForecast} from './forecast-state.js';
 import {emphasizeProgress} from './progress.js';
+import {renderCalculator} from './brs-calculator.js';
 
 const reasons={
   no_active_enrollment:['Нет действующего зачисления. Прежние баллы сохранены в истории.','No active enrollment. Previous scores remain in history.'],
@@ -57,7 +58,9 @@ export function renderForecast(document,root,items,previous=new Map()){
         (event.retake_policy?' · '+policy[event.retake_policy]:'')+
         (unmet?' · '+t('обязательное условие не выполнено','required condition not met'):'')));
     }
-    card.append(list);root.append(card);
+    card.append(list);
+    renderCalculator(document,card,item);
+    root.append(card);
   }
 }
 export function mountForecast(document,request=requestJson){
@@ -70,6 +73,7 @@ export function mountForecast(document,request=requestJson){
     if(value.state==='ready')renderForecast(document,root,value.data.items,previous);
   }});
   document.getElementById('forecast-refresh').addEventListener('click',controller.load);
+  document.addEventListener?.('mgimov:language',controller.load);
   return {identity(value,expired){onExpired=expired;previous.clear();return controller.setUser(value.state==='ready'?value.user:null);}};
 }
 let mounted;

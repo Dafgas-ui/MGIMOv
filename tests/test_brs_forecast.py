@@ -131,3 +131,23 @@ class ForecastTests(unittest.TestCase):
         row=self.read()['credit']
         self.assertFalse(row['available']);self.assertEqual(row['reason'],'transfer_reconciliation')
         self.assertNotIn('published_points',row)
+
+    def test_http_additive_calculator_contract_is_read_only(self):
+        with connection(self.case.settings) as db:
+            before = list(db.iterdump())
+        rows = self.read()
+        for path in ("/js/brs-calculator.js", "/js/brs-calculator-state.js", "/css/calculator.css"):
+            self.assertEqual(self.case.clients["alice"].get(path).status_code,200,path)
+        for row in rows.values():
+            self.assertEqual(row['plan_maximum'], 100)
+            self.assertIsNone(row['published_points'])
+            self.assertIsNone(row['predicted_result'])
+            categories = {category['code']:category for category in row['categories']}
+            for event in row['events']:
+                self.assertIn(event['category_code'], categories)
+                self.assertEqual(event['required'], False)
+                self.assertEqual(event['admission_min'], 0)
+                self.assertIn('retake_policy', event)
+            self.assertTrue(all(category['admission_min']==0 for category in categories.values()))
+        with connection(self.case.settings) as db:
+            self.assertEqual(list(db.iterdump()), before)
