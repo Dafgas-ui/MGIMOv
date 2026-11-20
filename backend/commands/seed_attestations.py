@@ -25,13 +25,23 @@ SUBJECTS = (('law','Демонстрационное право','exam'),
             ('language','Деловой английский','graded_credit'))
 
 
-def seed(settings, credentials, today=None):
+def seed(settings, credentials, today=None, *, score_overrides=None, no_exam_students=()):
     path = settings.database
     if path.exists() or not path.is_relative_to((ROOT/'.tmp').resolve()) or path.suffix!='.sqlite3':
         raise ValueError('Choose a new .tmp/*.sqlite3 database.')
     if set(credentials)!=set(ACCOUNTS):
         raise ValueError('Expected exactly twenty demo credentials.')
     hashes = {key:hash_password(credentials[key]) for key in ACCOUNTS}
+    score_overrides = score_overrides or {}
+    no_exam_students = set(no_exam_students)
+    if not no_exam_students <= set(STUDENTS):
+        raise ValueError('Unknown student in no-exam scenario.')
+    for (student, subject), scores in score_overrides.items():
+        if (student not in STUDENTS or subject not in {item[0] for item in SUBJECTS}
+                or len(scores) != len((20, 20, 20, 40))
+                or any(type(points) is not int or points < 0 or points > maximum
+                       for points, maximum in zip(scores, (20, 20, 20, 40)))):
+            raise ValueError('Invalid synthetic BRS score override.')
     today = today or datetime.now(MOSCOW).date()
     start = today-timedelta(days=95)
     end = today+timedelta(days=45)
@@ -103,7 +113,8 @@ def seed(settings, credentials, today=None):
                 first = today-timedelta(days=88)+timedelta(days=number*6+index)
                 for event,maximum in enumerate(maxima):
                     result = uuid4().hex
-                    points = maximum if number==1 else maximum-2
+                    override = score_overrides.get((student, subject))
+                    points = override[event] if override is not None else (maximum if number==1 else maximum-2)
                     db.execute("INSERT INTO brs_event_results VALUES (?,?,?,?)",
                                (result,course,plan_id,f'c{event}'))
                     db.execute("INSERT INTO brs_attempt_versions VALUES (?,?,?,1,1,1,?,'t01',?,NULL)",
@@ -132,15 +143,17 @@ def seed(settings, credentials, today=None):
                 if control=='exam':
                     scenarios = {1:[5],2:[2],3:[2,4],4:[2],5:[2],6:[4],7:[4],8:[3],
                                  9:[2,2,3],10:[2,2,2],11:[]}
+                    if student in no_exam_students:
+                        scenarios[number] = []
                     for offset,grade in enumerate(scenarios[number]):
                         slot = attempt(first+timedelta(days=offset),grade,commission=offset==2,draft_only=number==7)
-                    if number==4:
+                    if number==4 and student not in no_exam_students:
                         instant = at(first+timedelta(days=1))
                         review = command('t02',instant,'review_requested',slot_id=slot,executor_id='t02',
                                          grade=3,reason='Проверен демонстрационный протокол',reference='DEMO-REVIEW-01')
                         command('d02',instant,'review_approved',review_version=review['version'])
                         command('t02',instant,'corrected',review_version=review['version'])
-                    if number==11:
+                    if number==11 and student not in no_exam_students:
                         attempt(first,absence=True)
                         future = at(today+timedelta(days=index+2),15)
                         command('d01',at(today,8),'scheduled',starts_at=future,ends_at=future+3600,

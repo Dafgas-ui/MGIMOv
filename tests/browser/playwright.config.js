@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['p1.spec.js', 'commission.spec.js', 'acceptance-*.spec.js', 'coursework.spec.js', 'attendance.spec.js', 'attendance-qr.spec.js', 'deadlines.spec.js', 'forecast.spec.js', 'rooms.spec.js'],
+  testMatch: ['p1.spec.js', 'commission.spec.js', 'acceptance-*.spec.js', 'coursework.spec.js', 'attendance.spec.js', 'attendance-qr.spec.js', 'deadlines.spec.js', 'forecast.spec.js', 'rooms.spec.js', 'contest-final.spec.js'],
   workers: 1,
   retries: 0,
   timeout: 90_000,

@@ -14,6 +14,29 @@ def interval(value, *, end=False):
     return int(value[:2])*60+int(value[3:])
 
 
+def available_rooms(db, day, left, right, *, capacity=1, building=None):
+    """Return only free rooms and access-rule status; omit occupancy and restriction reasons."""
+    midnight=int(datetime.combine(day,time(),MOSCOW).timestamp())
+    starts,ends=midnight+left*60,midnight+right*60
+    rows=db.execute("""SELECT r.id,r.number,r.capacity,b.id AS building_id,b.name AS building,
+        CASE WHEN h.building_id IS NULL THEN 'unknown' ELSE 'known' END AS access_rules
+        FROM rooms r JOIN buildings b ON b.id=r.building_id
+        LEFT JOIN building_open_hours h ON h.building_id=b.id AND h.weekday=?
+        WHERE r.capacity>=? AND (? IS NULL OR b.id=?)
+        AND (h.building_id IS NULL OR (h.opens IS NOT NULL AND h.opens<=? AND h.closes>=?))
+        AND NOT EXISTS(SELECT 1 FROM room_unavailability u WHERE u.room_id=r.id
+            AND u.starts_at<? AND (u.ends_at IS NULL OR u.ends_at>?))
+        AND NOT EXISTS(SELECT 1 FROM lessons l WHERE l.room_id=r.id AND l.date=?
+            AND l.status='scheduled' AND l.start_minute<? AND l.end_minute>?)
+        AND NOT EXISTS(SELECT 1 FROM attestation_slots s WHERE s.room_id=r.id
+            AND s.starts_at<? AND s.ends_at>? AND NOT EXISTS(
+                SELECT 1 FROM attestation_events e WHERE e.slot_id=s.id AND e.kind IN
+                    ('cancelled','excused','unexcused','published','completed')))
+        ORDER BY b.name,r.number,r.id""",
+        (day.weekday(),capacity,building,building,left,right,ends,starts,day.isoformat(),right,left,ends,starts))
+    return [dict(row) for row in rows]
+
+
 def install_rooms(app,settings):
     router=APIRouter(prefix='/api/v1/me/rooms')
     def identity(request,db):
@@ -43,23 +66,6 @@ def install_rooms(app,settings):
                 building=q.get('building')
                 if building is not None and not db.execute('SELECT 1 FROM buildings WHERE id=?',(building,)).fetchone():raise ValueError()
             except (ValueError,TypeError):raise AuthError(422,'Invalid date, interval or filter') from None
-            midnight=int(datetime.combine(day,time(),MOSCOW).timestamp())
-            starts,ends=midnight+left*60,midnight+right*60
-            rows=db.execute("""SELECT r.id,r.number,r.capacity,b.id AS building_id,b.name AS building,
-                CASE WHEN h.building_id IS NULL THEN 'unknown' ELSE 'known' END AS access_rules
-                FROM rooms r JOIN buildings b ON b.id=r.building_id
-                LEFT JOIN building_open_hours h ON h.building_id=b.id AND h.weekday=?
-                WHERE r.capacity>=? AND (? IS NULL OR b.id=?)
-                AND (h.building_id IS NULL OR (h.opens IS NOT NULL AND h.opens<=? AND h.closes>=?))
-                AND NOT EXISTS(SELECT 1 FROM room_unavailability u WHERE u.room_id=r.id
-                    AND u.starts_at<? AND (u.ends_at IS NULL OR u.ends_at>?))
-                AND NOT EXISTS(SELECT 1 FROM lessons l WHERE l.room_id=r.id AND l.date=?
-                    AND l.status='scheduled' AND l.start_minute<? AND l.end_minute>?)
-                AND NOT EXISTS(SELECT 1 FROM attestation_slots s WHERE s.room_id=r.id
-                    AND s.starts_at<? AND s.ends_at>? AND NOT EXISTS(
-                        SELECT 1 FROM attestation_events e WHERE e.slot_id=s.id AND e.kind IN
-                            ('cancelled','excused','unexcused','published','completed')))
-                ORDER BY b.name,r.number,r.id""",
-                (day.weekday(),capacity,building,building,left,right,ends,starts,day.isoformat(),right,left,ends,starts))
-            return {'items':[dict(r) for r in rows],'date':day.isoformat(),'start':q['start'],'end':q['end'],'timezone':'Europe/Moscow'}
+            return {'items':available_rooms(db,day,left,right,capacity=capacity,building=building),
+                    'date':day.isoformat(),'start':q['start'],'end':q['end'],'timezone':'Europe/Moscow'}
     app.include_router(router)

@@ -1731,3 +1731,137 @@ integer-only, empty/zero, RU/EN, 390 px, reset, network failure, account switch)
 Chrome регрессия QR/аудитории 2/2 PASS, exit 0. Полная Python/Chrome-регрессия
 в этой ограниченной интеграции не запускалась; Linux/VPS NOT VERIFIED.
 Логи и review diff в .tmp/calculator-integration*. Индекс пуст, HEAD сохранён.
+
+## DEMO-FINAL — финальная синтетическая конкурсная демосреда
+
+**Рабочая ветка:** `demo/contest-final-data`; основа `16374b071d542f0824a2436637cc38151ccd574f`.
+**Окружение:** Python 3.13 из `C:\Projects\MGIMOv\.venv`, Windows 11; все SQLite
+создавались только в текущем worktree `.tmp`, без рабочей базы и VPS.
+
+- `python -B -m py_compile backend/commands/seed_attestations.py backend/commands/seed_contest_final.py backend/room_routes.py tests/test_contest_final_demo.py` — PASS, exit 0.
+- `python -B -m unittest -v tests.test_contest_final_demo` — **5/5 PASS**, exit 0. Проверены свежие миграции текущего checkout, целостность/FK, 20 аккаунтов и валидность всех паролей по Argon2-хешам, роли, BRS 49/50/51, разделение прогноза/официального результата, prior-semester debt, Coursework, переведённая историческая ведомость, Staff scope, поиск помещений и обратная совместимость старого seed без параметров.
+- `git diff --check` — PASS, exit 0.
+- Прямая `prepare()` на Windows — PASS: приватный каталог и DPAPI-файл созданы, миграционный статус (25), 20 аккаунтов и 51 помещение проверены; временный экземпляр удалён. Это тест функции подготовки, а не проверка полного интерактивного CLI.
+- Попытка Uvicorn + HTTP smoke на новой временной SQLite: серверный процесс стартовал, однако клиентский connect на `127.0.0.1` завершался `WinError 10013`. `/api/health` за 20 секунд не получен; процесс остановлен, временная папка удалена. HTTP, входы в браузере и browser E2E — **NOT VERIFIED**.
+- `TestClient` в этом Windows-окружении зависал до первого запроса; отдельные suite с TestClient не запускались повторно. Это ограничение среды, не утверждение о дефекте продукта.
+- JS/Chrome, мобильные размеры, Linux, QR-схема и полный регрессионный набор не запускались; frontend-код не изменялся.
+
+Из-за невозможности выполнить loopback HTTP smoke генератор готов к повторной проверке,
+но конкурсная демосреда пока не считается полностью подтверждённой. Полную инструкцию
+и матрицу сценариев см. [contest-final-demo](contest-final-demo.md).
+
+### DEMO-FINAL — исправления по первому аудиту, 20.11.2026
+
+Worktree `demo/contest-final-data`, база `de1c8f2ce51e685f60291bc60dfbc525ac029488`.
+Независимое воспроизведение показало дефект `no_exam_students={'s04'}`:
+базовый seed пытался создать специальный экзаменационный слот для студента без
+экзаменационного назначения, используя слот предыдущего студента. Исправление
+пропускает оба специальных сценария экзамена для исключённого студента; тест
+подтверждает отсутствие слотов и событий S04.
+
+- `.venv\Scripts\python.exe -B -m unittest -v tests.test_contest_final_demo` —
+  **10/10 PASS**, exit 0, 52.703 s. Включает полную сверку применённых миграций
+  с текущим реестром (без жёсткой привязки к 0025), существующий файл/повторный
+  запуск, путь вне `.tmp` и неверное расширение, появление конкурирующего файла
+  после preflight, отказ перезаписи, очистку staging после искусственной ошибки,
+  no-exam S04, два независимых запуска и проверку приватности credentials,
+  аккаунты, BRS/Coursework/attendance и room availability. Временные SQLite
+  синтетические и удаляются фикстурами.
+- Полная команда `python -B -m unittest discover -s tests -v` — **NOT VERIFIED**:
+  прогон остановлен вручную после зависания на первом
+  `test_anonymous_staff_idor_query_json_and_mutations`; следующего вывода за
+  70 секунд не появилось. Это не PASS и не результат полного набора.
+- `git diff --check` и компиляция изменённых Python-файлов — результаты записаны
+  в review-handoff после финального локального прогона.
+
+Генератор строит базу в случайном staging-файле, проверяет данные и только затем
+атомарно публикует путь без замены появившегося конкурентного файла. Ошибка до
+публикации удаляет staging; ошибка подготовки/проверки DPAPI удаляет только
+файлы созданного ею приватного запуска. На Windows публикация использует
+`os.rename`, на POSIX — hard-link create-if-absent и удаление staging-имени.
+Это локальные Windows-проверки; POSIX-путь и Linux-права NOT VERIFIED.
+
+## Интеграция финального демогенератора, 20.11.2026 — передача на аудит
+
+Основной HEAD acdbfcdef3ce9c9fa3cbf7cf37f479f01b1660d8 (main, чист до переноса).
+Источник demo/contest-final-data: de1c8f2ce51e685f60291bc60dfbc525ac029488 и
+b9f3b9cb4a6183d8349d8af54f5696f33b5a5aa3; исходный worktree проверен чистым,
+не изменялся. Пользователь сообщил ACCEPT WITH CONDITIONS Opus для источника;
+это не независимый ACCEPT текущей интеграции. Калькулятор уже принят и находится
+в main; прежние записи о запрете его коммита относятся к предыдущему этапу.
+
+Перенесены 13 путей источника. Документы сведены добавлением истории к main,
+а не заменой старой веткой. SQL поиска вынесен в available_rooms без изменения
+семантики/авторизации. Дополнительно: итоговый seed исключает экзаменационные
+слоты S04 вместе с S01 (проверено на финальной базе), новая проверка backup/restore
+демобазы, собственная приватная Chrome-фикстура и её включение в полный набор.
+Всего интеграция затрагивает 16 путей. Миграции 0001–0026, cleanup_sessions,
+приложение, авторизация, QR, калькулятор и frontend-ресурсы не изменяются.
+
+Целевые Python 35/35 PASS, exit 0; JS 124/124 PASS, exit 0; standalone Chrome
+калькулятора PASS, exit 0; повторный Chrome демогенератора/Coursework 9/9 PASS,
+exit 0. Полная регрессия записывается ниже после фактического завершения.
+Реальные HTTP-входы Student/Staff, изоляция Coursework, calculator, rooms 390 px,
+QR из нового seed (S07 present; S02 отказ) подтверждены Chrome. Учётные данные
+передаются только через приватный IPC, traces отключены; скриншоты без токенов.
+
+История неуспешных прогонов сохранена: первая собственная browser-фикстура
+ожидала отсутствующий __init__.py; затем тест искал журнал преподавателя в
+деканатском списке без соответствующих прав. Исправлен переход через штатную
+кнопку «Посещаемость», права не расширялись. Первый полный Chrome: 23 PASS,
+2 timeout, exit 1. Первый добавленный backup-тест дал ошибку строгой ACL-проверки
+в tempfile-каталоге; используется существующая защищённая backup-фикстура,
+повтор 35/35 PASS. Оборванный запуск полной Python-регрессии без exit code
+не считается PASS; повтор запущен с отдельным устойчивым журналом.
+
+Linux/systemd/VPS и реальная камера QR/публичный HTTPS NOT VERIFIED.
+Тестовый clock используется только в изолированной HTTP-фикстуре (21.11, 09:15).
+Реальный QR требует времени занятия: у seed g-a/law 09:00–10:00 МСК даты-якоря.
+Для другого времени нужна штатная подготовка расписания и подтверждение состава,
+не отключение серверного ограничения. Демобазы только синтетические; production,
+реальные backup, worktree Gemini/Luna не менялись. Коммит/публикация запрещены
+до независимого ACCEPT интеграции. Публичный выпуск не разрешён.
+
+Итоговый полный Chrome: 25/25 PASS, exit 0 (1,9 мин); журнал
+`.tmp/demo-integration-chrome-final-full.log`. Калькулятор standalone также PASS.
+Первичные тайм-ауты не включены в число успешных прогонов.
+
+Команды интеграционной проверки (Windows; Python — приватная копия проекта,
+созданная PrivateDemoDirectory в профиле, только синтетические SQLite):
+
+```text
+C:\Projects\MGIMOv\.venv\Scripts\python.exe -B -m unittest -v tests.test_contest_final_demo tests.test_attendance_qr tests.test_rooms tests.test_brs_calculator_contract
+C:\Projects\MGIMOv\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
+npm test
+node tests/browser/node_modules/@playwright/test/cli.js test --config tests/browser/playwright.config.js
+MGIMOV_PLAYWRIGHT_MODULE=<installed tests/browser/node_modules/playwright/index.mjs>
+MGIMOV_TEST_PYTHON=<main .venv/Scripts/python.exe>
+node tests/browser/brs-calculator.e2e.mjs
+git diff --check
+```
+
+Полные журналы без credentials/session IPC: `.tmp/demo-integration-python-targeted-final.log`,
+`.tmp/demo-integration-python-full-final.log`, `.tmp/demo-integration-js.log`,
+`.tmp/demo-integration-chrome-final-full.log`, `.tmp/demo-integration-calculator-chrome.log`.
+Chrome HTML/report и скриншоты — `.tmp/playwright-p1/`; они исключены из Git.
+
+Окончательная регрессия интеграции: Python unittest discover 261 PASS / 0 FAIL /
+0 SKIP, 500,348 с, exit 0; целевые Python 35 PASS / 0 FAIL / 0 SKIP, exit 0;
+JavaScript 124 PASS / 0 FAIL, exit 0; полный Chrome 25 PASS / 0 FAIL, exit 0;
+standalone калькулятора Chrome PASS, exit 0. В полном Python прошли миграции,
+backup/restore и репетиция двух rollback. Ранее оборванный журнал и неуспешные
+браузерные попытки сохранены отдельно, их результаты не заменяются PASS.
+
+Синтетическая база: 11 Student + 9 Staff, 50 добавленных аудиторий (51 всего),
+две Coursework, БРС 49/50/51, долг S02, попытки/пересдачи, отмена/перенос занятий,
+составы и история посещаемости, S04 без слотов/событий экзамена по праву.
+integrity_check=ok, foreign_key_check=[], весь реестр 0001–0026 применён без
+pending. Подтверждены no-overwrite/repeat, удаление собственного staging при
+ошибке, реальные Windows ACL и DPAPI. Новых незакрытых P0/P1/P2 в интеграции
+по выполненным проверкам не обнаружено; это не независимая приёмка безопасности.
+
+READY FOR INDEPENDENT AUDIT. HEAD acdbfcdef3ce9c9fa3cbf7cf37f479f01b1660d8,
+main; 16 незакоммиченных путей (11 modified + 5 untracked), индекс пуст.
+Коммита, merge, push, tag, ZIP, deploy и обращения к VPS не было.
+Для публичного релиза сохраняются Linux/systemd/права, эксплуатационный
+restore/rollback, уведомления и реальный публичный HTTPS/камера — NOT VERIFIED.

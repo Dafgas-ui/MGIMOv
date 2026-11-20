@@ -19,7 +19,7 @@ Student получает собственные расписание, зачёт
 - Посещаемость конкретного занятия, подтверждаемый состав и история исправлений.
   Пустой/неоднозначный состав запрещён; баллы БРС автоматически не начисляются.
 - Прогноз из существующего серверного расчёта, отдельный от официальной оценки;
-  прогресс с reduced motion. Калькулятора «что будет, если» нет.
+  прогресс с reduced motion. Калькулятор «что, если» рассчитывает только несохраняемый сценарий.
 - Учебные сроки: отдельные Student-источники, серверное время и бюджет всей
   загрузки 5 с. Это не атомарный снимок; обновление 30 с и при lifecycle-событиях.
   Во время остановки JavaScript интерфейс изменить невозможно.
@@ -44,21 +44,21 @@ Linux/systemd/Nginx и текущий VPS для нового RC4 — NOT VERIFI
 ```powershell
 $private = & python -B -c "from pathlib import Path; from backend.commands.contest_demo_permissions import PrivateDemoDirectory; print(PrivateDemoDirectory(Path.home()).path)"
 if ($LASTEXITCODE -ne 0 -or -not $private) { throw 'Private directory unavailable' }
-$files = @(git ls-files --cached -- backend frontend tests requirements.txt requirements-test.txt constraints.txt package.json README.md RELEASE.md | Sort-Object -Unique)
+$files = @(git ls-files --cached -- backend frontend tests docs/contest-final-demo.md requirements.txt requirements-test.txt constraints.txt package.json README.md RELEASE.md | Sort-Object -Unique)
 if ($LASTEXITCODE -ne 0 -or -not $files) { throw 'Source inventory unavailable' }
 foreach ($file in $files) { $target = Join-Path $private $file; [IO.Directory]::CreateDirectory((Split-Path -Parent $target)) | Out-Null; Copy-Item -LiteralPath $file -Destination $target -ErrorAction Stop }
 Set-Location -LiteralPath $private
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -B -m backend.commands.seed_contest_demo --confirm-demo
+.\.venv\Scripts\python.exe -B -m backend.commands.seed_contest_final `
+  --confirm-demo --anchor-date 2026-11-21
 ```
 
-Вводятся три НОВЫХ разных пароля: s01, s02, t01. Не записывать в Git или логи.
-Seed сам создаёт новую SQLite и все 26 миграций, выводит DEMO_DB. Не выполнять
-init перед этим seed. Повторный запуск создаёт другой экземпляр без дублей
-в первой базе. Всего 20 аккаунтов; остальные 17 получают случайные пароли,
-которые этот seed не выдаёт. Для полного набора доступов нужен отдельный
-seed_attestations и согласованная подготовка Coursework, не смешение баз.
+Финальный генератор создаёт новую SQLite с 26 миграциями и 20 разными
+случайными паролями (11 Student, 9 Staff). Windows сохраняет пароли только
+в DPAPI текущего пользователя. Не выводите их в логи и не включайте в Git.
+Повторная подготовка создаёт отдельную базу. Не запускайте init перед seed.
+Подробности: [финальная демосреда](docs/contest-final-demo.md).
 
 ```powershell
 $env:MGIMOV_DB_PATH = Read-Host 'Paste the DEMO_DB path printed by seed'
