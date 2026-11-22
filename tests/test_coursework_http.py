@@ -68,6 +68,26 @@ class CourseworkHTTPTests(unittest.TestCase):
         attempts = self.case.clients['alice'].get(f'{STUDENT}/{work}').json()['attempts']
         self.assertEqual([attempt['method'] for attempt in attempts], ['in_person'])
 
+    def test_text_files_accept_ordinary_unicode_and_reject_control_characters(self):
+        from backend.coursework_files import decode_file
+        encode = lambda raw: {'name': 'a.txt', 'content': base64.b64encode(raw).decode()}
+        for raw in ('в\u00a0году'.encode(), b'\xef\xbb\xbfhello', 'a\u200db\u00adc'.encode(),
+                    'Привет\r\n\tмир'.encode(), '👨\u200d👩'.encode()):
+            self.assertEqual(decode_file(encode(raw))[1], raw)
+        for raw in (b'a\x00b', b'a\x07b', 'a\u202eb'.encode(), 'a\u2066b'.encode(), b'a\x7fb',
+                    b'\xff\xfe', b'\xef\xbb\xbf\xef\xbb\xbf\x00'):
+            with self.assertRaises(Exception, msg=repr(raw)):
+                decode_file(encode(raw))
+        # Over HTTP an NBSP or BOM file is stored, not refused.
+        for raw in ('в\u00a0году'.encode(), b'\xef\xbb\xbfhello'):
+            work = self.create()
+            self.assertEqual(self.command(work, 'publish', 1).status_code, 200)
+            body = self.payload(response='Answer', files=[encode(raw)])
+            sent = self.case.post(f'{STUDENT}/{work}/submissions/with-files', body, 'alice')
+            self.assertEqual(sent.status_code, 201, sent.text)
+            stored, = self.case.clients['alice'].get(f'{STUDENT}/{work}').json()['files']
+            self.assertEqual(self.case.clients['alice'].get(f"{STUDENT}/files/{stored['id']}").content, raw)
+
     def test_private_files_are_versioned_and_committed_with_attempt(self):
         work = self.create()
         posted = f'{STAFF}/{work}/materials'

@@ -2,11 +2,23 @@
 import base64
 import binascii
 import re
+import unicodedata
 import uuid
 
 from .brs.service import fail
 
 MAX_FILE_BYTES = 65_536
+# Bidirectional controls can disguise text in other viewers, so they stay rejected.
+BIDI_CONTROLS = frozenset('\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069')
+
+
+def acceptable_text(text):
+    """Allow ordinary text (NBSP, ZWJ, soft hyphen, a leading BOM); reject control and bidi characters."""
+    if text.startswith('\ufeff'):
+        text = text[1:]
+    return not any(
+        char in BIDI_CONTROLS or (unicodedata.category(char) in ('Cc', 'Cs') and char not in '\t\r\n')
+        for char in text)
 
 
 def decode_file(file):
@@ -22,9 +34,7 @@ def decode_file(file):
         decoded = content.decode('utf-8')
     except (UnicodeError, ValueError, binascii.Error):
         fail(422, 'Файл должен содержать текст UTF-8.')
-    if not 1 <= len(content) <= MAX_FILE_BYTES or any(
-        not (char.isprintable() or char in '\t\r\n') for char in decoded
-    ):
+    if not 1 <= len(content) <= MAX_FILE_BYTES or not acceptable_text(decoded):
         fail(422, 'Файл должен содержать текст UTF-8 до 64 КиБ.')
     return name, content
 
