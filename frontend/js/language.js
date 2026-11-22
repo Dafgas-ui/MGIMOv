@@ -77,6 +77,7 @@ QR-посещаемость|QR attendance
 Обновить кабинет|Refresh dashboard
 Личный кабинет|Account
 Проверяем вход…|Checking your sign-in…
+Проверяем сессию…|Checking your session…
 Логин|Username
 Пароль|Password
 Войти|Sign in
@@ -158,7 +159,7 @@ QR-посещаемость|QR attendance
 История|History
 Мой учебный день|My study day
 МСК|MSK
-РАБОЧЕЕ МЕСТО ДЕКАНАТА|DEAN'S OFFICE WORKSPACE
+КАБИНЕТ СОТРУДНИКА|STAFF DASHBOARD
 СТУДЕНЧЕСКИЙ КАБИНЕТ|STUDENT DASHBOARD
 MGIMOv · КОНКУРСНЫЙ КОНЦЕПТ|MGIMOv · COMPETITION CONCEPT
 Проверяем состояние аккаунта…|Checking your account…

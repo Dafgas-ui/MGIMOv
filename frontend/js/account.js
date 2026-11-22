@@ -98,7 +98,9 @@ const controller = createAccountState({request:requestJson,
     if (typeof scheduleIdentity === 'function') scheduleIdentity(null);
     if (typeof academicsIdentity === 'function') academicsIdentity(null);
     if (typeof requestsIdentity === 'function' && value.state!=='ready') requestsIdentity(null,{suspend:value.state==='suspended' || (value.state==='loading' && value.operation==='refresh') || (value.state==='error' && !value.identityInvalidated),discardOperation:value.operation==='logout'});
-    profile.replaceChildren(); accountPanel.hidden = true; loginPanel.hidden = false;
+    profile.replaceChildren(); accountPanel.hidden = true;
+    // The initial/refresh session check must not flash a sign-in form for an existing session.
+    loginPanel.hidden = value.state === 'loading' && value.operation === 'refresh';
     fields.disabled = ['loading','logout-pending','suspended'].includes(value.state);
     get('account-check').disabled = ['loading','suspended'].includes(value.state);
     get('logout').hidden = value.state !== 'ready';

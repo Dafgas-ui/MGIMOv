@@ -129,3 +129,57 @@ test('reply, decision draft and current-page filter remain independent across re
  failure=0;await c.reply('Reply draft');assert.equal(c.getReplyDraft('a'),'');assert.equal(c.getDraft('a'),'Decision draft');assert.equal(posts.at(-1).body.version,2);
  c.clear();assert.equal(c.getReplyDraft('a'),'');assert.equal(c.getFilter(),'');
 });
+function stripFixture(clientWidth,scrollWidth,scrollLeft=0){
+ const f=fixture(),strip=f.get('app-sidebar');let left=scrollLeft;
+ // Mirror browser clamping so edge behaviour matches a real scroll container.
+ Object.defineProperty(strip,'scrollLeft',{get:()=>left,set:value=>{left=Math.max(0,Math.min(value,scrollWidth-clientWidth));}});
+ Object.assign(strip,{clientWidth,scrollWidth});
+ f.shell.identity(ready());
+ const wheel=(init={})=>{let prevented=false;strip.handlers.wheel({deltaY:100,deltaX:0,deltaMode:0,ctrlKey:false,shiftKey:false,...init,preventDefault(){prevented=true;}});return prevented;};
+ return {...f,strip,wheel,scrollTo(value){left=value;strip.handlers.scroll();}};
+}
+test('wheel over an overflowing strip scrolls it horizontally in the middle and at both boundaries',()=>{
+ const f=stripFixture(500,900,0);
+ assert.equal(f.get('app-nav-prev').hidden,false);
+ assert.equal(f.wheel({deltaY:150}),true);assert.equal(f.strip.scrollLeft,150);
+ f.scrollTo(400);assert.equal(f.wheel({deltaY:100}),true);assert.equal(f.strip.scrollLeft,400);
+ f.scrollTo(0);assert.equal(f.wheel({deltaY:-100}),true);assert.equal(f.strip.scrollLeft,0);
+});
+test('wheel keeps Ctrl, Shift, horizontal and non-overflow behaviour untouched',()=>{
+ const f=stripFixture(500,900,200);
+ for(const init of [{ctrlKey:true},{shiftKey:true},{deltaX:30},{deltaY:0}]){
+  assert.equal(f.wheel(init),false,JSON.stringify(init));assert.equal(f.strip.scrollLeft,200);
+ }
+ const fits=stripFixture(900,900,0);
+ assert.equal(fits.get('app-nav-prev').hidden,true);
+ assert.equal(fits.wheel({deltaY:100}),false);
+});
+test('navigation arrows ignore a 2 px end remainder at every tested width',()=>{
+ for(const width of [320,901,1280,1920,2200]){
+  const f=stripFixture(width,width+400,0),prev=f.get('app-nav-prev'),next=f.get('app-nav-next');
+  assert.equal(prev.hidden,false);assert.equal(prev.disabled,true);assert.equal(next.disabled,false);
+  f.scrollTo(200);assert.equal(prev.disabled,false);assert.equal(next.disabled,false);
+  f.scrollTo(398);assert.equal(next.disabled,true,`2 px remainder at ${width}`);
+  f.scrollTo(397);assert.equal(next.disabled,false,`3 px remainder at ${width}`);
+  f.scrollTo(400);assert.equal(next.disabled,true);assert.equal(prev.disabled,false);
+  const fits=stripFixture(width,width,0);assert.equal(fits.get('app-nav-prev').hidden,true);assert.equal(fits.get('app-nav-next').hidden,true);
+ }
+});
+test('shell shows a neutral session check while loading and never relabels Staff as the dean office',()=>{
+ const f=fixture();
+ f.shell.identity({state:'loading',operation:'refresh',message:'Проверяем сессию…'});
+ assert.equal(f.get('page-title').textContent,'Проверяем сессию…');
+ assert.equal(f.get('identity-status').textContent,'Проверяем сессию…');
+ assert.equal(f.get('app-bottom').hidden,true);
+ f.shell.identity({state:'anonymous'});assert.equal(f.get('page-title').textContent,'Вход');
+ for(const [id,role,kicker] of [['T01','staff','КАБИНЕТ СОТРУДНИКА'],['D01','staff','КАБИНЕТ СОТРУДНИКА'],['S01','student','СТУДЕНЧЕСКИЙ КАБИНЕТ']]){
+  f.shell.identity(ready(id,role));assert.equal(f.get('page-kicker').textContent,kicker);
+ }
+});
+test('staff kicker is translated and the old dean-office label is gone from sources',()=>{
+ const language=readFileSync('frontend/js/language.js','utf8');
+ assert.match(language,/^КАБИНЕТ СОТРУДНИКА\|STAFF DASHBOARD$/m);
+ assert.match(language,/^Проверяем сессию…\|Checking your session…$/m);
+ for(const file of ['frontend/js/language.js','frontend/js/ui-shell.js','frontend/index.html'])
+  assert.ok(!/РАБОЧЕЕ МЕСТО ДЕКАНАТА|Рабочее место деканата/i.test(readFileSync(file,'utf8')),file);
+});

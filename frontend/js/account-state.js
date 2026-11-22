@@ -23,7 +23,7 @@ export function createAccountState({request, readCsrf, publish, signalChange = (
     const id = ++generation;
     active?.abort(); const abort = new AbortController(); active = abort; busy = true; owner = null;
     const timer = setTimeout(() => abort.abort(), timeoutMs);
-    emit('loading', kind === 'logout' ? 'Завершаем сессию…' : 'Проверяем вход…',{operation:kind});
+    emit('loading', kind === 'logout' ? 'Завершаем сессию…' : kind === 'refresh' ? 'Проверяем сессию…' : 'Проверяем вход…',{operation:kind});
     const call = (path, options = {}) => request(path, {...options, signal: abort.signal});
     const current = () => id === generation;
     try {

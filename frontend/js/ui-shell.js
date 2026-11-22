@@ -4,20 +4,22 @@ const aliases={'mvp-section':'home','dashboard-section':'home','identity-title':
 let mounted=null;
 export function mountShell(document,host=globalThis){
   const get=id=>document.getElementById(id);
-  let user=null,ready=false,page='profile',scopeKey='';
+  let user=null,ready=false,checking=false,page='profile',scopeKey='';
   const positions=new Map();let navigationKey='';
   const roots=['profile-section','settings-section','schedule-section','academics-section','attestations-section','coursework-section','deadlines-section','rooms-section','requests-section','mvp-section','history-section'];
   const make=(tag,text)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
   const role=()=>ready?user?.role:null;
   const desktop=get('app-sidebar'),prev=get('app-nav-prev'),next=get('app-nav-next');
   const desktopFrame=desktop.parentElement;
+  // A bold current link can leave about 2 px after reaching the end; do not re-enable the arrow for it.
+  const edgeTolerance=2;
   function updateScroll(){
     // Compare against the whole strip so the arrow buttons cannot create their own overflow.
     const width=desktopFrame?.clientWidth??desktop.clientWidth;
     const overflow=width>0&&desktop.scrollWidth>width;
     prev.hidden=next.hidden=!overflow;
-    prev.disabled=!overflow||desktop.scrollLeft<=1;
-    next.disabled=!overflow||desktop.scrollLeft+desktop.clientWidth>=desktop.scrollWidth-1;
+    prev.disabled=!overflow||desktop.scrollLeft<=edgeTolerance;
+    next.disabled=!overflow||desktop.scrollLeft+desktop.clientWidth>=desktop.scrollWidth-edgeTolerance;
   }
   function scrollNavigation(direction){desktop.scrollBy?.({left:direction*desktop.clientWidth*.7});}
   function reveal(link){
@@ -29,10 +31,11 @@ export function mountShell(document,host=globalThis){
   desktop.addEventListener('scroll',updateScroll);
   desktop.addEventListener('wheel',event=>{
     if(prev.hidden||event.ctrlKey||event.shiftKey||event.deltaX||!event.deltaY)return;
-    const left=desktop.scrollLeft;
     const step=event.deltaMode===1?16:event.deltaMode===2?desktop.clientWidth:1;
     desktop.scrollLeft+=event.deltaY*step;
-    if(desktop.scrollLeft!==left)event.preventDefault();
+    // Over an overflowing strip the vertical wheel stays horizontal, including at both ends,
+    // so the page does not jump when the strip reaches its boundary.
+    event.preventDefault();
   },{passive:false});
   desktop.addEventListener('focusin',event=>reveal(event.target));
   desktop.addEventListener('keydown',event=>{
@@ -84,8 +87,8 @@ export function mountShell(document,host=globalThis){
     for(const id of ['dashboard-section','notifications-section','documents-section','staff-section'])get(id)?.classList.toggle('screen-off',!(parts[page]||[]).includes(id));
     for(const node of document.querySelectorAll('[data-staff-part]'))node.classList.toggle('screen-off',node.dataset.staffPart!==(page==='students'?'students':'schedule'));
     get('mvp-document')?.classList.toggle('screen-off',!['documents','certificates'].includes(page));
-    const title=pagesFor(role()).find(([id])=>id===visiblePage)?.[1]||'Вход в кабинет';
-    get('page-title').textContent=t(visiblePage==='home'?'Мой учебный день':title);get('page-subtitle').textContent=new Date().toLocaleDateString(locale(),{timeZone:'Europe/Moscow',weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · '+t('МСК');get('page-kicker').textContent=t(ready?(user.role==='staff'?'РАБОЧЕЕ МЕСТО ДЕКАНАТА':'СТУДЕНЧЕСКИЙ КАБИНЕТ'):'MGIMOv · КОНКУРСНЫЙ КОНЦЕПТ');
+    const title=checking&&!ready?'Проверяем сессию…':pagesFor(role()).find(([id])=>id===visiblePage)?.[1]||'Вход в кабинет';
+    get('page-title').textContent=t(visiblePage==='home'?'Мой учебный день':title);get('page-subtitle').textContent=new Date().toLocaleDateString(locale(),{timeZone:'Europe/Moscow',weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · '+t('МСК');get('page-kicker').textContent=t(ready?(user.role==='staff'?'КАБИНЕТ СОТРУДНИКА':'СТУДЕНЧЕСКИЙ КАБИНЕТ'):'MGIMOv · КОНКУРСНЫЙ КОНЦЕПТ');
     const root=get(active);get('screen-loading').hidden=!ready||!root?.hidden;
     get('app-bottom').hidden=!ready;get('app-mobile-bar').hidden=!ready;get('app-search-area').hidden=!ready;
     document.documentElement.dataset.role=ready?user.role:'anonymous';
@@ -128,7 +131,7 @@ export function mountShell(document,host=globalThis){
   return {
     go,refresh:apply,
     identity(value){
-      ready=value.state==='ready';get('identity-status').textContent=ready?'':t(value.message||'');
+      ready=value.state==='ready';checking=value.state==='loading'&&value.operation==='refresh';get('identity-status').textContent=ready?'':t(value.message||'');
       if(!ready){history(null);setMenu(false);get('app-search-results').replaceChildren();get('app-search-results').hidden=true;get('app-search').value='';}
       if(value.state==='anonymous'||value.state==='logout-pending'||(value.state==='loading'&&value.operation==='logout')||value.identityInvalidated){
         if(scopeKey&&!value.preserveRoute)replaceHash('');

@@ -92,3 +92,48 @@ test('actual account DOM adapter preserves an unfinished password across poll an
  get('login-form').handlers.submit({preventDefault(){}});await new Promise(r=>setTimeout(r,0));
  assert.equal(submitted.password,'synthetic-draft');assert.equal(get('password').value,'');
 });
+async function sessionAdapter({me}){
+ const {readFileSync}=await import('node:fs');const {runInNewContext}=await import('node:vm');
+ const nodes=new Map(),calls=[];
+ const element=()=>({value:'',hidden:false,disabled:false,textContent:'',handlers:{},addEventListener(name,fn){this.handlers[name]=fn;},replaceChildren(){},append(){}});
+ const get=id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);};
+ const document={visibilityState:'visible',getElementById:get,createElement:element,addEventListener(){}};
+ const history=[];
+ const requestJson=async(path,options={})=>{
+  calls.push(`${options.method||'GET'} ${path}`);
+  if(path.endsWith('/auth/me'))return me(history,get);
+  if(path.endsWith('/me/profile'))return {user:{id:'S1',role:'student'},profile:{full_name:'Synthetic Student'}};
+  throw Object.assign(new Error(),{status:401});
+ };
+ const source=readFileSync('frontend/js/account.js','utf8').replace(/^import .*;$/gm,'');
+ const shellStates=[];
+ runInNewContext(source,{document,requestJson,createAccountState,
+  shellIdentity:value=>shellStates.push(value.state),
+  mountLanguage:()=>({setUser(){}}),t:value=>value,attestationIdentity(){},courseworkIdentity(){},attendanceIdentity(){},deadlinesIdentity(){},forecastIdentity(){},roomsIdentity(){},qrAttendanceIdentity(){},
+  createAppearanceState:()=>({setUser(){},update(){},reset(){},systemThemeChanged(){}}),
+  location:{protocol:'http:'},addEventListener(){},setInterval(){}});
+ return {get,calls,history};
+}
+test('page refresh with a valid session hides the login form while /auth/me is pending, then shows the account',async()=>{
+ let release,seen;
+ const f=await sessionAdapter({me:(history,get)=>new Promise(resolve=>{
+  seen={login:get('login-panel').hidden,message:get('account-message').textContent,check:get('account-check').disabled};
+  release=()=>resolve({user:{id:'S1',role:'student'}});
+ })});
+ await new Promise(r=>setTimeout(r,0));
+ assert.deepEqual(seen,{login:true,message:'Проверяем сессию…',check:true});
+ assert.equal(f.get('login-panel').hidden,true);assert.equal(f.get('account-panel').hidden,true);
+ release();await new Promise(r=>setTimeout(r,0));
+ assert.equal(f.get('login-panel').hidden,true);assert.equal(f.get('account-panel').hidden,false);
+ assert.deepEqual(f.calls,['GET /api/v1/auth/me','GET /api/v1/me/profile']);
+ assert.ok(!f.calls.some(call=>call.startsWith('POST')&&call.includes('/auth/login')));
+});
+test('page refresh without a session moves from the neutral check to the login form',async()=>{
+ let seen;
+ const f=await sessionAdapter({me:async(history,get)=>{seen=get('login-panel').hidden;throw Object.assign(new Error(),{status:401});}});
+ await new Promise(r=>setTimeout(r,0));
+ assert.equal(seen,true);
+ assert.equal(f.get('login-panel').hidden,false);assert.equal(f.get('account-panel').hidden,true);
+ assert.equal(f.get('account-message').textContent,'Сессия отсутствует или завершилась. Войдите снова.');
+ assert.deepEqual(f.calls,['GET /api/v1/auth/me']);
+});
