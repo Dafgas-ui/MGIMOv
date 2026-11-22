@@ -632,6 +632,63 @@ class BRSFoundationTests(unittest.TestCase):
             change_in_transaction(db,"l",2,"Return",{"teacher_id":"t"},self.now+1)
         self.assertEqual(self.clients["teacher"].get(access).status_code, 404)
 
+    def test_cancelled_lesson_keeps_existing_grant_and_restore_changes_nothing(self):
+        flow = self.flow(self.locked())
+        self.assertEqual(self.bind().status_code, 201)
+        self.assertEqual(self.grant(flow).status_code, 201)
+        access = f"{STAFF}/offerings/{flow}/access"
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 200)
+        with connection(self.settings, write=True) as db:
+            change_in_transaction(db,"l",1,"Cancelled",{"status":"cancelled"},self.now)
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 200)
+        for who in ("admin","second","outside"):
+            self.assertEqual(self.clients[who].get(access).status_code, 404)
+        with connection(self.settings, write=True) as db:
+            change_in_transaction(db,"l",2,"Restored",{"status":"scheduled"},self.now+1)
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 200)
+
+    def test_cancellation_does_not_survive_replacement_move_out_of_term_or_revocation(self):
+        flow = self.flow(self.locked())
+        self.assertEqual(self.bind().status_code, 201)
+        access = f"{STAFF}/offerings/{flow}/access"
+        with connection(self.settings) as db:
+            original_date = db.execute("SELECT date FROM lessons WHERE id='l'").fetchone()[0]
+
+        def version():
+            with connection(self.settings) as db:
+                return db.execute("SELECT version FROM lessons WHERE id='l'").fetchone()[0]
+
+        def change(reason, at, **fields):
+            with connection(self.settings, write=True) as db:
+                change_in_transaction(db,"l",version(),reason,fields,self.now+at)
+
+        # 1. Cancelled, then moved outside the semester: access ends.
+        first = self.grant(flow, version=version())
+        self.assertEqual(first.status_code, 201, first.text)
+        change("Cancelled", 1, status="cancelled")
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 200)
+        change("Moved", 2, date="2031-01-01")
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 404)
+        change("Reset", 3, date=original_date, status="scheduled")
+        self.assertEqual(self.post(f"{ADMIN}/grants/{first.json()['id']}/revoke", {}).status_code, 200)
+        # 2. A cancelled lesson keeps access until the approval is revoked; no new approval is possible.
+        grant = self.grant(flow, version=version())
+        self.assertEqual(grant.status_code, 201, grant.text)
+        change("Cancelled", 4, status="cancelled")
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 200)
+        self.assertEqual(self.grant(flow, version=version()).status_code, 404)
+        self.assertEqual(self.post(f"{ADMIN}/grants/{grant.json()['id']}/revoke", {}).status_code, 200)
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 404)
+        change("Reset", 5, status="scheduled")
+        # 3. Cancelled, then the teacher is replaced: access ends and stays ended after the teacher returns.
+        self.assertEqual(self.grant(flow, version=version()).status_code, 201)
+        change("Cancelled", 6, status="cancelled")
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 200)
+        change("Replacement", 7, teacher_id="t2")
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 404)
+        change("Return", 8, teacher_id="t", status="scheduled")
+        self.assertEqual(self.clients["teacher"].get(access).status_code, 404)
+
     def test_substitute_appointment_is_limited_to_approved_event(self):
         flow = self.flow(self.locked())
         student = self.created(f"{ADMIN}/offerings/{flow}/enrollments", {"student_id":"alice","starts_on":"2027-02-01"})

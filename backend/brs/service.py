@@ -234,6 +234,9 @@ def revoke_teaching(db, actor, now, key):
     return {"id": key}
 
 
+# A lesson cancellation does not end an existing approval: the teacher must still review submitted
+# work. Replacing the teacher or moving the lesson out of the semester still does. New approvals
+# (grant_teaching/bind_teacher) continue to require a scheduled lesson.
 def teaching_offerings(db, actor, now, key=None, *, semester_id=None, event_code=None, confirm=False):
     if actor["role"] != "staff":
         fail(403, "Доступно преподавателю.")
@@ -244,14 +247,13 @@ def teaching_offerings(db, actor, now, key=None, *, semester_id=None, event_code
             JOIN brs_whole_teacher_accounts t ON t.staff_id=g.staff_id JOIN lessons l ON l.id=g.lesson_id
             WHERE g.offering_id=o.id AND g.staff_id=? AND g.revoked_at IS NULL
             AND g.starts_at<=? AND g.expires_at>? AND l.teacher_id=t.teacher_id
-            AND l.group_id=o.group_id AND l.subject_id=c.subject_id AND l.status='scheduled'
+            AND l.group_id=o.group_id AND l.subject_id=c.subject_id
             AND l.date BETWEEN s.starts_on AND s.ends_on AND (?=0 OR g.can_confirm_final=1)
             AND (g.event_code IS NULL OR g.event_code=?)
             AND NOT EXISTS (
                 SELECT 1 FROM lesson_changes ch WHERE ch.lesson_id=g.lesson_id
                 AND ch.version>g.lesson_version
                 AND (json_extract(ch.after_json,'$.teacher_id') IS NOT t.teacher_id
-                     OR json_extract(ch.after_json,'$.status') IS NOT 'scheduled'
                      OR coalesce(json_extract(ch.after_json,'$.date') BETWEEN s.starts_on AND s.ends_on,0)=0)
             )
         ) ORDER BY o.id""",
